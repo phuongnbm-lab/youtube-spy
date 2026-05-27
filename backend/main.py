@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="YT Hour Spy API")
+app = FastAPI(title="YouTube Spy API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -104,7 +104,67 @@ def _parse_dt(raw_dt: str, video_id: str, title: str, thumbnail: str) -> dict | 
         "hour": dt_ict.hour,
         "dayIndex": dt_ict.weekday(),
         "dayName": DAYS_VN[dt_ict.weekday()],
+        "month": dt_ict.month,
+        "year": dt_ict.year,
+        # Sẽ được điền bởi enrich_videos()
+        "description": "",
+        "tags": [],
+        "viewCount": "0",
+        "likeCount": "0",
+        "durationSec": 0,
+        "durationStr": "",
+        "isShort": False,
     }
+
+
+def _parse_iso_duration(s: str) -> int:
+    """PT1H2M3S → số giây."""
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", s or "")
+    if not m:
+        return 0
+    return int(m.group(1) or 0) * 3600 + int(m.group(2) or 0) * 60 + int(m.group(3) or 0)
+
+
+def _fmt_duration(sec: int) -> str:
+    if sec <= 0:
+        return ""
+    if sec < 3600:
+        m, s = divmod(sec, 60)
+        return f"{m}:{s:02d}"
+    h, r = divmod(sec, 3600)
+    m, s = divmod(r, 60)
+    return f"{h}:{m:02d}:{s:02d}"
+
+
+def enrich_videos(youtube, videos: list) -> list:
+    """Gọi videos.list để lấy description, tags, viewCount, duration."""
+    if not videos:
+        return videos
+    enriched_map = {}
+    for i in range(0, len(videos), 50):
+        batch = videos[i:i + 50]
+        ids = ",".join(v["videoId"] for v in batch)
+        try:
+            resp = youtube.videos().list(
+                part="snippet,statistics,contentDetails", id=ids
+            ).execute()
+            for item in resp.get("items", []):
+                snippet = item["snippet"]
+                stats = item.get("statistics", {})
+                cd = item.get("contentDetails", {})
+                sec = _parse_iso_duration(cd.get("duration", ""))
+                enriched_map[item["id"]] = {
+                    "description": snippet.get("description", "")[:400],
+                    "tags": snippet.get("tags", [])[:20],
+                    "viewCount": stats.get("viewCount", "0"),
+                    "likeCount": stats.get("likeCount", "0"),
+                    "durationSec": sec,
+                    "durationStr": _fmt_duration(sec),
+                    "isShort": 0 < sec <= 60,
+                }
+        except Exception:
+            pass
+    return [{**v, **enriched_map.get(v["videoId"], {})} for v in videos]
 
 
 def _fetch_via_playlist(youtube, playlist_id: str, limit: int) -> list:
@@ -233,6 +293,10 @@ async def analyze(
 
         if not videos:
             raise HTTPException(status_code=404, detail="Không thể lấy video. Kênh có thể đang ở chế độ riêng tư hoặc chưa có video công khai.")
+
+        # Enrich với description, tags, viewCount (bỏ qua nếu dùng RSS)
+        if fetch_method != "rss":
+            videos = enrich_videos(youtube, videos)
 
         hour_counts = Counter(v["hour"] for v in videos)
         day_counts = Counter(v["dayIndex"] for v in videos)

@@ -6,6 +6,7 @@ import DayChart from './components/DayChart'
 import VideoList from './components/VideoList'
 import ApiKeyModal from './components/ApiKeyModal'
 import TimezoneConverter from './components/TimezoneConverter'
+import FeaturedVideos from './components/FeaturedVideos'
 
 function ErrorBanner({ message }) {
   return (
@@ -92,7 +93,7 @@ export default function App() {
               </svg>
             </div>
             <div>
-              <span className="text-sm font-bold gradient-text">YT Hour Spy</span>
+              <span className="text-sm font-bold gradient-text">YouTube Spy</span>
               <span className="ml-2 text-xs text-zinc-600">v1.0</span>
             </div>
           </div>
@@ -176,16 +177,45 @@ export default function App() {
               <DayChart dayData={data.dayData} dayLabels={data.dayLabels} peakDayIndex={data.peakDayIndex} />
             </div>
             <TimezoneConverter peakHour={data.peakHour} />
+            <FeaturedVideos videos={data.videos} peakHour={data.peakHour} />
             <VideoList videos={data.videos} />
           </div>
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-zinc-800/60 py-5">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-zinc-700">
-          <span>YT Hour Spy · Dữ liệu từ YouTube Data API v3</span>
-          <span>Giờ hiển thị: ICT UTC+7 (Việt Nam)</span>
+      <footer className="border-t border-zinc-800/60 pt-6 pb-8">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+          {/* Left: info */}
+          <div className="flex flex-col gap-1.5 text-center sm:text-left">
+            <div className="flex items-center gap-2 justify-center sm:justify-start">
+              <div className="w-6 h-6 rounded-md bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+                <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                </svg>
+              </div>
+              <span className="text-xs font-semibold text-zinc-400">YouTube Spy</span>
+              <span className="text-[10px] text-zinc-700 bg-zinc-800 px-1.5 py-0.5 rounded font-mono">v27.05.2026</span>
+            </div>
+            <div className="text-xs text-zinc-600 space-y-0.5">
+              <div>Tác giả: <span className="text-zinc-500 font-medium">Bá Phương</span></div>
+              <div>Zalo: <a href="https://zalo.me/0904066020" target="_blank" rel="noopener noreferrer"
+                className="text-violet-500 hover:text-violet-400 transition-colors">0904066020</a></div>
+              <div className="text-zinc-700 pt-0.5">Dữ liệu từ YouTube Data API v3 · ICT UTC+7</div>
+            </div>
+          </div>
+
+          {/* Right: Buy me a coffee */}
+          <div className="flex flex-col items-center gap-2">
+            <span className="text-[11px] text-zinc-600 font-medium">☕ Ủng hộ tác giả</span>
+            <div className="p-1.5 bg-white rounded-xl shadow-lg shadow-black/30">
+              <img
+                src="/buy-me-a-coffee.png"
+                alt="Buy me a coffee QR"
+                className="w-24 h-24 rounded-lg object-cover"
+              />
+            </div>
+          </div>
         </div>
       </footer>
 

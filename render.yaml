@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: yt-hour-spy-api
+    name: youtube-spy-api
     env: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt

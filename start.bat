@@ -1,5 +1,5 @@
 @echo off
-echo [YT Hour Spy] Starting...
+echo [YouTube Spy] Starting...
 
 start "Backend" cmd /k "cd /d %~dp0backend && python -m uvicorn main:app --reload --port 8000"
 timeout /t 2 /nobreak >nul
