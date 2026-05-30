@@ -8,22 +8,18 @@ echo  ║     YouTube Spy — Tao Release        ║
 echo  ╚══════════════════════════════════════╝
 echo.
 
-:: Doc APP_VERSION tu main.py
-for /f "tokens=3 delims== " %%v in ('findstr /r "APP_VERSION = " backend\main.py') do (
-    set RAW=%%v
-)
-:: Bo dau ngoac kep
-set VERSION=%RAW:"=%
+:: Lay ngay hom nay lam version: YYYY.MM.DD
+for /f "tokens=2 delims==" %%d in ('wmic os get LocalDateTime /value') do set DT=%%d
+set VERSION=%DT:~0,4%.%DT:~4,2%.%DT:~6,2%
 set TAG=v%VERSION%
 
-echo  Phien ban hien tai: %TAG%
+echo  Phien ban moi: %TAG%
 echo.
 echo  Cac buoc se thuc hien:
-echo    1. git add tat ca thay doi
-echo    2. git commit
-echo    3. git push len GitHub
-echo    4. Tao tag %TAG%
-echo    5. Push tag → GitHub Actions tu dong build EXE va tao Release
+echo    1. git commit + push len GitHub
+echo    2. Tao tag %TAG%
+echo    3. Push tag → GitHub Actions tu dong build EXE va tao Release
+echo    4. Bob mo app → bam "Cap nhat ngay" → tu dong cap nhat
 echo.
 set /p CONFIRM= Ban chac chan muon release %TAG%? (Y/N): 
 if /i not "%CONFIRM%"=="Y" (
@@ -49,7 +45,7 @@ if errorlevel 1 (
 echo  [3/4] Tao tag %TAG%...
 git tag %TAG%
 if errorlevel 1 (
-    echo  [LOI] Tag %TAG% da ton tai! Doi APP_VERSION trong backend\main.py truoc.
+    echo  [LOI] Tag %TAG% da ton tai! Hom nay da release roi.
     pause & exit /b 1
 )
 
@@ -66,10 +62,7 @@ echo  ║           THANH CONG!                ║
 echo  ╚══════════════════════════════════════╝
 echo.
 echo  GitHub Actions dang build EXE tu dong.
-echo  Khoang 5-10 phut sau se co ban tai tai:
-echo  https://github.com/phuongnbm-lab/youtube-spy/releases
-echo.
-echo  Bob se tu dong thay thong bao khi mo app!
+echo  Khoang 5-10 phut sau Bob se thay thong bao "Cap nhat ngay" khi mo app.
 echo.
 
 start https://github.com/phuongnbm-lab/youtube-spy/actions

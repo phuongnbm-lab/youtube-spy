@@ -26,7 +26,6 @@ import logging
 load_dotenv()
 logging.basicConfig(level=logging.ERROR)
 
-APP_VERSION = "2.0"
 GITHUB_REPO = "phuongnbm-lab/youtube-spy"
 
 app = FastAPI(title="YouTube Spy API")
@@ -78,6 +77,7 @@ def _save_key_to_file(key: str):
 API_KEY = _load_saved_key() or os.getenv("YOUTUBE_API_KEY")
 ICT = timezone(timedelta(hours=7))
 DAYS_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
+APP_VERSION = datetime.now(ICT).strftime("%Y.%m.%d")
 
 
 # ── License ──────────────────────────────────────────────────────────────────
@@ -781,6 +781,54 @@ async def update_check():
         }
     except Exception as e:
         return {"current": APP_VERSION, "latest": APP_VERSION, "has_update": False, "error": str(e)}
+
+
+@app.post("/api/do-update")
+async def do_update(body: dict):
+    """
+    Tải file EXE mới về, viết script thay thế, khởi động lại app.
+    Chỉ hoạt động khi chạy dưới dạng EXE (frozen).
+    """
+    if not getattr(sys, 'frozen', False):
+        raise HTTPException(status_code=400, detail="Chỉ hoạt động khi chạy dưới dạng EXE")
+
+    download_url = body.get("download_url", "")
+    if not download_url:
+        raise HTTPException(status_code=400, detail="Thiếu download_url")
+
+    current_exe = sys.executable
+    new_exe = current_exe + ".new"
+    updater_bat = os.path.join(os.path.dirname(current_exe), "_updater.bat")
+
+    try:
+        req = urllib.request.Request(download_url, headers={"User-Agent": "YouTubeSpy-Updater"})
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            with open(new_exe, "wb") as f:
+                f.write(resp.read())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tải file thất bại: {e}")
+
+    # Viết script thay thế EXE rồi khởi động lại
+    bat_content = f"""@echo off
+ping 127.0.0.1 -n 3 >nul
+move /y "{new_exe}" "{current_exe}"
+start "" "{current_exe}"
+del "%~f0"
+"""
+    with open(updater_bat, "w", encoding="utf-8") as f:
+        f.write(bat_content)
+
+    subprocess.Popen(["cmd", "/c", updater_bat], creationflags=subprocess.CREATE_NO_WINDOW)
+
+    # Tắt app sau 1 giây để script kịp chạy
+    def _exit():
+        import time
+        time.sleep(1)
+        os._exit(0)
+
+    import threading
+    threading.Thread(target=_exit, daemon=True).start()
+    return {"ok": True}
 
 
 # ── Serve React frontend (production build) ───────────────────────────────────

@@ -77,6 +77,7 @@ export default function App() {
   const [mode, setMode] = useState('analyze') // 'analyze' | 'search' | 'keyword' | 'thumbnail'
   const [license, setLicense] = useState(null) // null=checking, {valid,reason,machine_id,...}
   const [updateInfo, setUpdateInfo] = useState(null) // null | {latest, release_url, download_url}
+  const [updating, setUpdating] = useState(false)
 
   useEffect(() => {
     checkLicense()
@@ -89,6 +90,21 @@ export default function App() {
       const json = await res.json()
       if (json.has_update) setUpdateInfo(json)
     } catch {}
+  }
+
+  const doUpdate = async () => {
+    if (!updateInfo?.download_url) return
+    setUpdating(true)
+    try {
+      await fetch('/api/do-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ download_url: updateInfo.download_url }),
+      })
+      // App sẽ tự tắt và khởi động lại — không cần xử lý thêm
+    } catch {
+      setUpdating(false)
+    }
   }
 
   const checkLicense = async (force = false) => {
@@ -192,34 +208,29 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
-            Có bản cập nhật mới <strong>v{updateInfo.latest}</strong> — Tải về để nhận tính năng mới nhất!
+            {updating
+              ? 'Đang tải bản mới... App sẽ tự khởi động lại ⏳'
+              : <>Có bản cập nhật mới <strong className="mx-1">v{updateInfo.latest}</strong> — Nhấn để cập nhật tự động!</>
+            }
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {updateInfo.download_url && (
-              <a
-                href={updateInfo.download_url}
-                target="_blank" rel="noopener noreferrer"
+          {!updating && (
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={doUpdate}
                 className="px-3 py-1 rounded-lg bg-white text-violet-700 text-xs font-semibold hover:bg-violet-50 transition-colors"
               >
-                Tải xuống
-              </a>
-            )}
-            <a
-              href={updateInfo.release_url}
-              target="_blank" rel="noopener noreferrer"
-              className="px-3 py-1 rounded-lg border border-white/30 text-white text-xs hover:bg-white/10 transition-colors"
-            >
-              Xem chi tiết
-            </a>
-            <button
-              onClick={() => setUpdateInfo(null)}
-              className="text-white/60 hover:text-white transition-colors ml-1"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+                Cập nhật ngay
+              </button>
+              <button
+                onClick={() => setUpdateInfo(null)}
+                className="text-white/60 hover:text-white transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
