@@ -2,13 +2,13 @@
 ; Cài vào %APPDATA%\YouTube Spy\ (không cần UAC)
 
 !define APP_NAME      "YouTube Spy"
-!define APP_VERSION   "2026.05.40"
+!define APP_VERSION   "2026.05.41"
 !define APP_EXE       "YouTube Spy.exe"
 !define INSTALL_DIR   "$APPDATA\YouTube Spy"
 !define PUBLISHER     "Bá Phương"
 
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "dist\YouTube Spy Setup ${APP_VERSION}.exe"
+OutFile "dist\YouTube Spy Setup 2026.05.41.exe"
 InstallDir "${INSTALL_DIR}"
 RequestExecutionLevel user   ; Không cần UAC
 ShowInstDetails nevershow
@@ -24,7 +24,7 @@ Section "Install"
   SetOutPath "$INSTDIR"
 
   ; Copy toàn bộ file từ thư mục onedir build
-  File /r "dist\onedir\*.*"
+  File /r "dist\onedir\YouTube Spy\*.*"
 
   ; Shortcut Desktop
   CreateShortcut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\${APP_EXE}" "" "$INSTDIR\${APP_EXE}"
