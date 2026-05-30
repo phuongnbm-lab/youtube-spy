@@ -77,7 +77,7 @@ def _save_key_to_file(key: str):
 API_KEY = _load_saved_key() or os.getenv("YOUTUBE_API_KEY")
 ICT = timezone(timedelta(hours=7))
 DAYS_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
-APP_VERSION = "2026.05.39"
+APP_VERSION = "2026.05.40"
 
 
 # ── License ──────────────────────────────────────────────────────────────────
@@ -835,23 +835,26 @@ async def do_update(body: dict):
     if not download_url:
         raise HTTPException(status_code=400, detail="Thiếu download_url")
 
-    current_exe = sys.executable
-    new_exe = current_exe + ".new"
-    updater_bat = os.path.join(os.path.dirname(current_exe), "_updater.bat")
+    exe_dir = os.path.dirname(sys.executable)
+    setup_file = os.path.join(exe_dir, "_update_setup.exe")
+    updater_bat = os.path.join(exe_dir, "_updater.bat")
 
     try:
         req = urllib.request.Request(download_url, headers={"User-Agent": "YouTubeSpy-Updater"})
         with urllib.request.urlopen(req, timeout=120) as resp:
-            with open(new_exe, "wb") as f:
+            with open(setup_file, "wb") as f:
                 f.write(resp.read())
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Tải file thất bại: {e}")
 
-    # Viết script thay thế EXE rồi khởi động lại
+    # Chạy NSIS silent install rồi mở app mới, xóa setup
+    install_dir = os.path.dirname(sys.executable)
+    app_exe = os.path.join(install_dir, "YouTube Spy.exe")
     bat_content = f"""@echo off
 ping 127.0.0.1 -n 3 >nul
-move /y "{new_exe}" "{current_exe}"
-start "" "{current_exe}"
+"{setup_file}" /S /D={install_dir}
+start "" "{app_exe}"
+del "{setup_file}"
 del "%~f0"
 """
     with open(updater_bat, "w", encoding="utf-8") as f:
@@ -859,7 +862,6 @@ del "%~f0"
 
     subprocess.Popen(["cmd", "/c", updater_bat], creationflags=subprocess.CREATE_NO_WINDOW)
 
-    # Tắt app sau 1 giây để script kịp chạy
     def _exit():
         import time
         time.sleep(1)
