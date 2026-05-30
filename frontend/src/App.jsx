@@ -81,12 +81,14 @@ export default function App() {
   const [devPanel, setDevPanel] = useState(false)
   const [devReleasing, setDevReleasing] = useState(false)
   const [devResult, setDevResult] = useState(null)
+  const [appVersion, setAppVersion] = useState('')
   const logoClickCount = useRef(0)
   const logoClickTimer = useRef(null)
 
   useEffect(() => {
     checkLicense()
     checkUpdate()
+    fetch('/api/version').then(r => r.json()).then(d => setAppVersion(d.version)).catch(() => {})
   }, [])
 
   const checkUpdate = async () => {
@@ -359,7 +361,7 @@ export default function App() {
             <img src="/logo.png" alt="YouTube Spy" className="w-8 h-8 rounded-lg object-cover cursor-pointer select-none" onClick={handleLogoClick} />
             <div>
               <span className="text-sm font-bold gradient-text">YouTube Spy</span>
-              <span className="ml-2 text-xs text-zinc-600">v1.0</span>
+              {appVersion && <span className="ml-2 text-xs text-zinc-600">v{appVersion}</span>}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -648,7 +650,7 @@ export default function App() {
             <div className="flex items-center gap-2 justify-center sm:justify-start">
               <img src="/logo.png" alt="YouTube Spy" className="w-6 h-6 rounded-md object-cover" />
               <span className="text-xs font-semibold text-zinc-400">YouTube Spy</span>
-              <span className="text-[10px] text-zinc-700 bg-zinc-800 px-1.5 py-0.5 rounded font-mono">v1.0</span>
+              {appVersion && <span className="text-[10px] text-zinc-700 bg-zinc-800 px-1.5 py-0.5 rounded font-mono">v{appVersion}</span>}
             </div>
             <div className="text-xs text-zinc-600 space-y-0.5">
               <div>Tác giả: <span className="text-zinc-500 font-medium">Bá Phương</span></div>
