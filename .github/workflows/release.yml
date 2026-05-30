@@ -1,0 +1,85 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build EXE
+        run: |
+          pyinstaller `
+            --onefile `
+            --noconsole `
+            --name "YouTube Spy" `
+            --icon "Logo_build.ico" `
+            --add-data "frontend/dist;dist" `
+            --add-data "Logo.ico;." `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.loops `
+            --hidden-import uvicorn.loops.auto `
+            --hidden-import uvicorn.protocols `
+            --hidden-import uvicorn.protocols.http `
+            --hidden-import uvicorn.protocols.http.auto `
+            --hidden-import uvicorn.protocols.websockets `
+            --hidden-import uvicorn.protocols.websockets.auto `
+            --hidden-import uvicorn.lifespan `
+            --hidden-import uvicorn.lifespan.on `
+            --hidden-import pystray._win32 `
+            --hidden-import pystray._base `
+            --hidden-import googleapiclient `
+            --hidden-import google.auth `
+            --collect-all uvicorn `
+            --collect-all pystray `
+            --collect-all PIL `
+            backend/launcher.py
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "YouTube Spy ${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## YouTube Spy ${{ steps.version.outputs.VERSION }}
+
+            ### Cài đặt
+            1. Tải file `YouTube Spy.exe` bên dưới
+            2. Double-click để chạy
+            3. Nhập YouTube API Key lần đầu
+
+            > Không cần cài đặt thêm gì cả.
+          files: dist/YouTube Spy.exe
+          draft: false
+          prerelease: false

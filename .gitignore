@@ -17,16 +17,12 @@ dist/
 *.spec
 _build_nuitka.py
 build_nuitka.bat
-build_exe.bat
 rebuild.bat
 
 # App runtime
 backend/config.json
 backend/ytspy.log
 
-# Misc
-Buy me a Coffee.png
-Logo.ico
-Logo_build.ico
+# Dev tools
 disable_statusline.bat
 disable_statusline.ps1
