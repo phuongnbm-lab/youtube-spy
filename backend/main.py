@@ -757,6 +757,45 @@ async def get_version():
     return {"version": APP_VERSION}
 
 
+@app.post("/api/dev/release")
+async def dev_release():
+    """Chỉ hoạt động khi chạy từ source (không phải EXE)."""
+    if getattr(sys, 'frozen', False):
+        raise HTTPException(status_code=403, detail="Chỉ hoạt động ở chế độ dev")
+
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    root_dir = os.path.join(src_dir, "..")
+    main_py  = os.path.join(src_dir, "main.py")
+
+    new_version = datetime.now(ICT).strftime("%Y.%m.%d")
+    tag = f"v{new_version}"
+
+    # Cập nhật APP_VERSION trong main.py
+    with open(main_py, "r", encoding="utf-8") as f:
+        content = f.read()
+    import re as _re
+    content = _re.sub(r'APP_VERSION = "[^"]+"', f'APP_VERSION = "{new_version}"', content)
+    with open(main_py, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    logs = []
+    def run(cmd):
+        r = subprocess.run(cmd, cwd=root_dir, capture_output=True, text=True)
+        logs.append(r.stdout.strip() or r.stderr.strip())
+        return r.returncode
+
+    run(["git", "add", "-A"])
+    run(["git", "commit", "-m", f"chore: release {tag}"])
+    if run(["git", "push", "origin", "master"]) != 0:
+        raise HTTPException(status_code=500, detail="Push thất bại — kiểm tra kết nối mạng")
+    if run(["git", "tag", tag]) != 0:
+        raise HTTPException(status_code=400, detail=f"Tag {tag} đã tồn tại — hôm nay đã release rồi")
+    if run(["git", "push", "origin", tag]) != 0:
+        raise HTTPException(status_code=500, detail="Push tag thất bại")
+
+    return {"ok": True, "version": new_version, "tag": tag, "logs": logs}
+
+
 @app.get("/api/update-check")
 async def update_check():
     """So sánh version hiện tại với GitHub Releases mới nhất."""

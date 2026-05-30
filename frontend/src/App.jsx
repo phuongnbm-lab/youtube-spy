@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import SearchBar from './components/SearchBar'
 import StatsCards from './components/StatsCards'
 import HourChart from './components/HourChart'
@@ -78,6 +78,11 @@ export default function App() {
   const [license, setLicense] = useState(null) // null=checking, {valid,reason,machine_id,...}
   const [updateInfo, setUpdateInfo] = useState(null) // null | {latest, release_url, download_url}
   const [updating, setUpdating] = useState(false)
+  const [devPanel, setDevPanel] = useState(false)
+  const [devReleasing, setDevReleasing] = useState(false)
+  const [devResult, setDevResult] = useState(null)
+  const logoClickCount = useRef(0)
+  const logoClickTimer = useRef(null)
 
   useEffect(() => {
     checkLicense()
@@ -90,6 +95,32 @@ export default function App() {
       const json = await res.json()
       if (json.has_update) setUpdateInfo(json)
     } catch {}
+  }
+
+  const handleLogoClick = () => {
+    logoClickCount.current += 1
+    clearTimeout(logoClickTimer.current)
+    logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0 }, 2000)
+    if (logoClickCount.current >= 5) {
+      logoClickCount.current = 0
+      setDevPanel(true)
+      setDevResult(null)
+    }
+  }
+
+  const doDevRelease = async () => {
+    setDevReleasing(true)
+    setDevResult(null)
+    try {
+      const res = await fetch('/api/dev/release', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) setDevResult({ ok: false, msg: json.detail })
+      else setDevResult({ ok: true, msg: `Release ${json.tag} thành công! GitHub Actions đang build...` })
+    } catch (e) {
+      setDevResult({ ok: false, msg: e.message })
+    } finally {
+      setDevReleasing(false)
+    }
   }
 
   const doUpdate = async () => {
@@ -234,6 +265,48 @@ export default function App() {
         </div>
       )}
 
+      {/* Dev release panel */}
+      {devPanel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setDevPanel(false)}>
+          <div className="bg-zinc-900 border border-violet-500/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs px-2 py-0.5 rounded bg-violet-500/20 text-violet-400 font-mono">DEV</span>
+              <span className="text-sm font-semibold text-zinc-200">Release Tool</span>
+            </div>
+            <p className="text-xs text-zinc-500 mb-5">
+              Tạo release mới với version hôm nay → push lên GitHub → GitHub Actions tự build EXE.
+            </p>
+            {devResult && (
+              <div className={`text-xs rounded-lg px-4 py-3 mb-4 ${devResult.ok ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                {devResult.msg}
+                {devResult.ok && (
+                  <a href="https://github.com/phuongnbm-lab/youtube-spy/actions"
+                    target="_blank" rel="noopener noreferrer"
+                    className="block mt-1 underline opacity-70">Xem tiến trình build →</a>
+                )}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                onClick={doDevRelease}
+                disabled={devReleasing}
+                className="flex-1 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+              >
+                {devReleasing ? 'Đang release...' : '🚀 Release ngay'}
+              </button>
+              <button
+                onClick={() => setDevPanel(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 text-sm transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Donate modal */}
       {showDonate && (
         <div
@@ -283,7 +356,7 @@ export default function App() {
       <header className="border-b border-zinc-800/60 sticky top-0 z-10 backdrop-blur-sm bg-zinc-950/80">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="YouTube Spy" className="w-8 h-8 rounded-lg object-cover" />
+            <img src="/logo.png" alt="YouTube Spy" className="w-8 h-8 rounded-lg object-cover cursor-pointer select-none" onClick={handleLogoClick} />
             <div>
               <span className="text-sm font-bold gradient-text">YouTube Spy</span>
               <span className="ml-2 text-xs text-zinc-600">v1.0</span>
