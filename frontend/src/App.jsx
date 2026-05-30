@@ -217,7 +217,7 @@ export default function App() {
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={doUpdate}
-                className="px-3 py-1 rounded-lg bg-white text-violet-700 text-xs font-semibold hover:bg-violet-50 transition-colors"
+                className="px-3 py-1 rounded-lg bg-white text-violet-700 text-xs font-semibold hover:bg-violet-50 transition-colors animate-update-glow"
               >
                 Cập nhật ngay
               </button>
@@ -614,6 +614,13 @@ export default function App() {
         }
         .animate-pulse-glow {
           animation: pulseGlow 1.6s ease-in-out infinite;
+        }
+        @keyframes updateGlow {
+          0%, 100% { box-shadow: 0 0 8px 2px rgba(255,255,255,0.6), 0 0 20px 4px rgba(167,139,250,0.5); }
+          50%       { box-shadow: 0 0 18px 6px rgba(255,255,255,0.9), 0 0 40px 10px rgba(167,139,250,0.8); }
+        }
+        .animate-update-glow {
+          animation: updateGlow 1.2s ease-in-out infinite;
         }
       `}</style>
     </div>
