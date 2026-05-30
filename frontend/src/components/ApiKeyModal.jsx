@@ -6,26 +6,41 @@ export default function ApiKeyModal({ onClose }) {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    setKey(localStorage.getItem('yt_api_key') || '')
+    // Ưu tiên key từ backend (lưu file, bền vững qua mọi lần restart)
+    fetch('/api/key')
+      .then(r => r.json())
+      .then(d => {
+        const k = d.key || localStorage.getItem('yt_api_key') || ''
+        setKey(k)
+        if (k) localStorage.setItem('yt_api_key', k)
+      })
+      .catch(() => setKey(localStorage.getItem('yt_api_key') || ''))
   }, [])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmed = key.trim()
-    if (trimmed) {
-      localStorage.setItem('yt_api_key', trimmed)
-    } else {
-      localStorage.removeItem('yt_api_key')
-    }
+    if (trimmed) localStorage.setItem('yt_api_key', trimmed)
+    else localStorage.removeItem('yt_api_key')
+    // Lưu vào file qua backend
+    try {
+      await fetch('/api/key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: trimmed }),
+      })
+    } catch {}
     setSaved(true)
-    setTimeout(() => {
-      setSaved(false)
-      onClose()
-    }, 800)
+    setTimeout(() => { setSaved(false); onClose() }, 800)
   }
 
   const handleClear = () => {
     setKey('')
     localStorage.removeItem('yt_api_key')
+    fetch('/api/key', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: '' }),
+    }).catch(() => {})
   }
 
   return (
@@ -63,7 +78,7 @@ export default function ApiKeyModal({ onClose }) {
         {/* Info box */}
         <div className="bg-zinc-900 rounded-lg p-3.5 mb-4 border border-zinc-800">
           <p className="text-xs text-zinc-400 leading-relaxed">
-            Key được lưu trong browser của mày. Không gửi cho ai khác.<br />
+            Key được lưu vào file cục bộ trên máy — không mất khi khởi động lại app. Không gửi cho ai khác.<br />
             Lấy key miễn phí tại{' '}
             <a
               href="https://console.cloud.google.com/apis/library/youtube.googleapis.com"

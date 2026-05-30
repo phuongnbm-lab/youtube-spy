@@ -1,4 +1,105 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+
+/* ── Lightbox xem thumbnail to ───────────────────────────────── */
+function ThumbLightbox({ videoId, onClose }) {
+  const [src, setSrc] = useState(`https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`)
+
+  // Nếu maxres lỗi, fallback xuống sddefault
+  const handleError = () => {
+    if (src.includes('maxresdefault')) setSrc(`https://i.ytimg.com/vi/${videoId}/sddefault.jpg`)
+    else if (src.includes('sddefault')) setSrc(`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`)
+  }
+
+  // Đóng khi bấm Esc
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+         onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/85 backdrop-blur-md"/>
+
+      {/* Image */}
+      <div className="relative z-10 max-w-4xl w-full"
+           onClick={(e) => e.stopPropagation()}>
+        <img
+          src={src}
+          onError={handleError}
+          alt=""
+          className="w-full rounded-xl shadow-2xl object-contain max-h-[80vh]"
+        />
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-zinc-800 border border-zinc-600
+            flex items-center justify-center text-zinc-300 hover:text-white hover:bg-zinc-700 transition-all shadow-lg">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function fileSlug(name) {
+  return (name || 'channel').replace(/[^\wÀ-ɏ一-鿿]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 30) || 'channel'
+}
+
+async function saveThumbnail(videoId, channelName) {
+  // Thử từ chất lượng cao xuống thấp; bỏ qua ảnh placeholder (< 5 KB)
+  const qualities = ['maxresdefault', 'sddefault', 'hqdefault', 'mqdefault']
+  for (const q of qualities) {
+    try {
+      const res = await fetch(`https://i.ytimg.com/vi/${videoId}/${q}.jpg`)
+      if (!res.ok) continue
+      const blob = await res.blob()
+      if (blob.size < 5000) continue          // placeholder nhỏ → bỏ qua
+      const objUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = objUrl
+      a.download = `${fileSlug(channelName)}_${videoId}_thumb.jpg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000)
+      return true
+    } catch { continue }
+  }
+  return false
+}
+
+function SaveThumbBtn({ videoId, channelName }) {
+  const [state, setState] = useState('idle') // idle | saving | done | error
+  const handle = async (e) => {
+    e.preventDefault(); e.stopPropagation()
+    setState('saving')
+    const ok = await saveThumbnail(videoId, channelName)
+    setState(ok ? 'done' : 'error')
+    setTimeout(() => setState('idle'), 2000)
+  }
+  const cfg = {
+    idle:   { icon: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4', cls: 'text-zinc-500 hover:text-sky-400 hover:border-sky-500/40', label: 'Save Thumb' },
+    saving: { icon: null, cls: 'text-sky-400 border-sky-500/30 animate-pulse', label: '...' },
+    done:   { icon: 'M5 13l4 4L19 7', cls: 'text-emerald-400 border-emerald-500/30', label: 'Saved!' },
+    error:  { icon: 'M6 18L18 6M6 6l12 12', cls: 'text-red-400 border-red-500/30', label: 'Lỗi' },
+  }[state]
+  return (
+    <button onClick={handle} title={cfg.label}
+      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border border-zinc-700 bg-zinc-800/80 transition-all ${cfg.cls}`}>
+      {cfg.icon ? (
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={cfg.icon}/>
+        </svg>
+      ) : <span className="w-3 h-3 flex items-center justify-center text-[10px]">↓</span>}
+      {cfg.label}
+    </button>
+  )
+}
 
 function CopyBtn({ text, label = '' }) {
   const [copied, setCopied] = useState(false)
@@ -10,21 +111,21 @@ function CopyBtn({ text, label = '' }) {
     })
   }
   return (
-    <button onClick={handle}
-      className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition-all ${
+    <button onClick={handle} title={copied ? 'Đã copy!' : (label || 'Copy')}
+      className={`flex items-center justify-center w-5 h-5 rounded transition-all ${
         copied
-          ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-          : 'bg-zinc-800 border-zinc-700 text-zinc-500 hover:text-zinc-300 hover:border-zinc-600'
+          ? 'text-emerald-400'
+          : 'text-zinc-600 hover:text-zinc-300'
       }`}>
       {copied ? (
-        <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
-        </svg>Đã copy</>
+        </svg>
       ) : (
-        <><svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
             d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-        </svg>{label || 'Copy'}</>
+        </svg>
       )}
     </button>
   )
@@ -39,7 +140,7 @@ function Section({ title, children, copyText, accent = 'violet' }) {
   }
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-1.5">
         <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded border ${colors[accent]}`}>
           {title}
         </span>
@@ -50,7 +151,7 @@ function Section({ title, children, copyText, accent = 'violet' }) {
   )
 }
 
-function exportSingleTxt(video) {
+function exportSingleTxt(video, channelName) {
   const lines = [
     `YOUTUBE SPY — Chi tiết video`,
     `${'═'.repeat(45)}`,
@@ -79,24 +180,39 @@ function exportSingleTxt(video) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `video-${video.videoId}.txt`
+  a.download = `${fileSlug(channelName)}_${video.videoId}_detail.txt`
   a.click()
   URL.revokeObjectURL(url)
 }
 
-export default function VideoDetailModal({ video, onClose }) {
+export default function VideoDetailModal({ video, onClose, channelName }) {
+  const [thumbOpen, setThumbOpen] = useState(false)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  useEffect(() => {
+    if (!video) return
+    const handler = (e) => { if (e.key === 'Escape') onCloseRef.current() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [video])
+
   if (!video) return null
 
   const allTags = video.tags?.join(', ') || ''
   const url = `https://youtube.com/watch?v=${video.videoId}`
 
   return (
+    <>
+    {thumbOpen && <ThumbLightbox videoId={video.videoId} onClose={() => setThumbOpen(false)} />}
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={onClose}/>
 
       {/* Modal */}
-      <div className="relative w-full max-w-xl max-h-[85vh] flex flex-col card border-zinc-700/60 shadow-2xl">
+      <div className="relative w-full max-w-xl max-h-[85vh] flex flex-col card border-zinc-700/60 shadow-2xl"
+        tabIndex={-1} autoFocus
+        onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -109,7 +225,7 @@ export default function VideoDetailModal({ video, onClose }) {
             <span className="text-sm font-semibold text-zinc-200">Chi tiết video</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => exportSingleTxt(video)}
+            <button onClick={() => exportSingleTxt(video, channelName)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-zinc-700
                 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all">
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -133,10 +249,21 @@ export default function VideoDetailModal({ video, onClose }) {
           {/* Thumbnail + meta */}
           <div className="flex gap-4">
             {video.thumbnail && (
-              <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0">
-                <img src={video.thumbnail} alt="" className="w-32 h-[72px] rounded-lg object-cover
-                  hover:opacity-80 transition-opacity"/>
-              </a>
+              <div className="shrink-0 flex flex-col gap-1.5">
+                <button onClick={() => setThumbOpen(true)}
+                  className="relative group rounded-lg overflow-hidden w-32 h-[72px] shrink-0 focus:outline-none">
+                  <img src={video.thumbnail} alt="" className="w-full h-full object-cover
+                    group-hover:opacity-70 transition-opacity"/>
+                  {/* Zoom icon overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <svg className="w-6 h-6 text-white drop-shadow-lg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0zm-3-3v6m-3-3h6"/>
+                    </svg>
+                  </div>
+                </button>
+                <SaveThumbBtn videoId={video.videoId} channelName={channelName} />
+              </div>
             )}
             <div className="flex flex-col gap-1.5 min-w-0">
               <div className="flex flex-wrap gap-1.5">
@@ -212,5 +339,6 @@ export default function VideoDetailModal({ video, onClose }) {
         </div>
       </div>
     </div>
+    </>
   )
 }
