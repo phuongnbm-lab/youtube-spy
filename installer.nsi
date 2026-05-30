@@ -2,18 +2,18 @@
 ; Cài vào %APPDATA%\YouTube Spy\ (không cần UAC)
 
 !define APP_NAME      "YouTube Spy"
-!define APP_VERSION   "2026.05.41"
+!define APP_VERSION   "2026.05.42"
 !define APP_EXE       "YouTube Spy.exe"
 !define INSTALL_DIR   "$APPDATA\YouTube Spy"
 !define PUBLISHER     "Bá Phương"
 
 Name "${APP_NAME} ${APP_VERSION}"
-OutFile "dist\YouTube Spy Setup 2026.05.41.exe"
+OutFile "dist\YouTube Spy Setup 2026.05.42.exe"
 InstallDir "${INSTALL_DIR}"
 RequestExecutionLevel user   ; Không cần UAC
 ShowInstDetails nevershow
 ShowUninstDetails nevershow
-SilentInstall silent          ; Chạy ngầm khi truyền /S
+; SilentInstall chỉ khi gọi với /S (auto-update), không set mặc định
 
 ; Icon
 Icon "Logo_build.ico"
@@ -44,10 +44,8 @@ Section "Install"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayIcon" "$INSTDIR\${APP_EXE}"
 
-  ; Tự mở app sau khi cài (bỏ qua nếu silent update)
-  IfSilent done
+  ; Tự mở app sau khi cài
   Exec '"$INSTDIR\${APP_EXE}"'
-  done:
 SectionEnd
 
 ;---------------------------------------------------
