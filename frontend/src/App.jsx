@@ -235,14 +235,25 @@ export default function App() {
 
       {/* Update banner */}
       {updateInfo && (
-        <div className="w-full bg-violet-600/90 border-b border-violet-500/50 px-6 py-2.5 flex items-center justify-between gap-4">
+        <div className={`w-full border-b px-6 py-2.5 flex items-center justify-between gap-4 transition-all ${
+          updating
+            ? 'bg-violet-700 border-violet-500/50 animate-banner-breathe'
+            : 'bg-violet-600/90 border-violet-500/50'
+        }`}>
           <div className="flex items-center gap-2 text-sm text-white">
-            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
+            {updating ? (
+              <div className="relative w-4 h-4 shrink-0">
+                <div className="absolute inset-0 rounded-full border-2 border-white/30" />
+                <div className="absolute inset-0 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              </div>
+            ) : (
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
             {updating
-              ? 'Đang tải bản mới... App sẽ tự khởi động lại ⏳'
+              ? <span className="animate-pulse-text">Đang tải bản mới... App sẽ tự khởi động lại</span>
               : <>Có bản cập nhật mới <strong className="mx-1">v{updateInfo.latest}</strong> — Nhấn để cập nhật tự động!</>
             }
           </div>
@@ -696,6 +707,20 @@ export default function App() {
         }
         .animate-update-glow {
           animation: updateGlow 1.2s ease-in-out infinite;
+        }
+        @keyframes bannerBreathe {
+          0%, 100% { opacity: 1; background-color: rgba(109,40,217,0.95); }
+          50%       { opacity: 0.75; background-color: rgba(124,58,237,0.8); }
+        }
+        .animate-banner-breathe {
+          animation: bannerBreathe 1.8s ease-in-out infinite;
+        }
+        @keyframes pulseText {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.5; }
+        }
+        .animate-pulse-text {
+          animation: pulseText 1.8s ease-in-out infinite;
         }
       `}</style>
     </div>
