@@ -77,7 +77,7 @@ def _save_key_to_file(key: str):
 API_KEY = _load_saved_key() or os.getenv("YOUTUBE_API_KEY")
 ICT = timezone(timedelta(hours=7))
 DAYS_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
-APP_VERSION = "2026.05.47"
+APP_VERSION = "2026.05.48"
 
 
 # ── License ──────────────────────────────────────────────────────────────────
