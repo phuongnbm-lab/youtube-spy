@@ -10,6 +10,34 @@ const MARKER_COLORS = [
 ]
 const colorOf = (key) => MARKER_COLORS.find(c => c.key === key) ?? MARKER_COLORS[0]
 
+function CopyLinkBtn({ videoId, size = 'md' }) {
+  const [copied, setCopied] = useState(false)
+  const handle = (e) => {
+    e.preventDefault(); e.stopPropagation()
+    navigator.clipboard.writeText(`https://youtube.com/watch?v=${videoId}`).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  const box = size === 'sm' ? 'w-6 h-6' : 'w-7 h-7'
+  return (
+    <button onClick={handle} title={copied ? 'Đã copy link!' : 'Copy link video'}
+      className={`${box} rounded-lg flex items-center justify-center border border-transparent transition-all ${
+        copied ? 'text-emerald-400' : 'text-zinc-600 hover:text-sky-400 hover:bg-sky-500/10 hover:border-sky-500/30'
+      }`}>
+      {copied ? (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+        </svg>
+      ) : (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+        </svg>
+      )}
+    </button>
+  )
+}
+
 const DAY_COLORS = {
   'Thứ 2': 'text-blue-400 bg-blue-500/10',
   'Thứ 3': 'text-indigo-400 bg-indigo-500/10',
@@ -86,7 +114,7 @@ function exportTxt(videos, channelName) {
   URL.revokeObjectURL(url)
 }
 
-export default function VideoList({ videos, channelName }) {
+export default function VideoList({ videos, channelName, channelMeta, bm }) {
   const [search, setSearch] = useState('')
   const [searchIn, setSearchIn] = useState({ title: true, description: true, tags: true })
   const [hourFrom, setHourFrom] = useState(0)
@@ -95,7 +123,8 @@ export default function VideoList({ videos, channelName }) {
   const [activeMonths, setActiveMonths] = useState([])   // [] = all
   const [activeYears, setActiveYears] = useState([])     // [] = all
   const [videoType, setVideoType] = useState('all')      // 'all' | 'short' | 'long'
-  const [onlyBookmarked, setOnlyBookmarked] = useState(false)
+  const [onlyBookmarked, setOnlyBookmarked] = useState(false)  // ⭐ đã lưu (persistent)
+  const [onlyMarked, setOnlyMarked] = useState(false)          // 🎀 đánh dấu màu (session)
   const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState('table')      // 'table' | 'grid'
   const [sortBy, setSortBy] = useState('default')        // 'default' | 'views_desc' | 'views_asc'
@@ -121,6 +150,13 @@ if (bookmarks[videoId]) {
     setBookmarks(prev => { const n = { ...prev }; delete n[videoId]; return n })
     setOpenPickerId(null)
   }
+
+  // Số thứ tự gốc của từng video (cố định, không đổi khi lọc/sắp xếp)
+  const indexMap = useMemo(() => {
+    const m = {}
+    videos.forEach((v, i) => { m[v.videoId] = i + 1 })
+    return m
+  }, [videos])
 
   // Derived unique months/years from data
   const allMonths = useMemo(() => [...new Set(videos.map(v => v.month))].sort((a,b)=>a-b), [videos])
@@ -155,8 +191,21 @@ if (bookmarks[videoId]) {
   }
 
   const bookmarkIds = Object.keys(bookmarks)
+  const savedKey = bm ? bm.bookmarks.map(b => b.videoId).join(',') : ''
+  const savedCount = bm ? videos.filter(v => bm.isSaved(v.videoId)).length : 0
+  const markedCount = bookmarkIds.length
+
+  // Tắt bộ lọc nếu không còn video tương ứng (tránh kẹt ở danh sách rỗng)
+  useEffect(() => {
+    if (onlyBookmarked && savedCount === 0) setOnlyBookmarked(false)
+  }, [onlyBookmarked, savedCount])
+  useEffect(() => {
+    if (onlyMarked && markedCount === 0) setOnlyMarked(false)
+  }, [onlyMarked, markedCount])
+
 const filtered = useMemo(() => videos.filter(v => {
-    if (onlyBookmarked && !bookmarks[v.videoId]) return false
+    if (onlyBookmarked && !(bm && bm.isSaved(v.videoId))) return false
+    if (onlyMarked && !bookmarks[v.videoId]) return false
     if (search.trim()) {
       const q = search.toLowerCase()
       const inTitle = searchIn.title && v.title.toLowerCase().includes(q)
@@ -172,7 +221,7 @@ const filtered = useMemo(() => videos.filter(v => {
     if (videoType === 'long'  && v.isShort)  return false
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [videos, onlyBookmarked, bookmarkIds.join(','), search, searchIn, hourFrom, hourTo, activeDays, activeMonths, activeYears, videoType])
+  }), [videos, onlyBookmarked, onlyMarked, bookmarkIds.join(','), savedKey, search, searchIn, hourFrom, hourTo, activeDays, activeMonths, activeYears, videoType])
 
   const sorted = (() => {
     if (sortBy === 'views_desc') return [...filtered].sort((a, b) => parseInt(b.viewCount || 0) - parseInt(a.viewCount || 0))
@@ -184,7 +233,8 @@ const filtered = useMemo(() => videos.filter(v => {
 
   return (
     <div className="card p-5 flex flex-col gap-4">
-      <VideoDetailModal video={detailVideo} onClose={() => setDetailVideo(null)} channelName={channelName} />
+      <VideoDetailModal video={detailVideo} onClose={() => setDetailVideo(null)} channelName={channelName}
+        channelMeta={channelMeta} bm={bm} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -208,9 +258,28 @@ const filtered = useMemo(() => videos.filter(v => {
             </button>
           </div>
 
-          {/* Bookmark filter */}
-          {Object.keys(bookmarks).length > 0 && (
+          {/* Filter: chỉ video đã đánh dấu màu (🎀 Bookmark) */}
+          {markedCount > 0 && (
+            <button onClick={()=>setOnlyMarked(v=>!v)}
+              title="Chỉ hiện video đã đánh dấu màu"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                onlyMarked
+                  ? 'bg-violet-500/20 border-violet-400/60 text-violet-300 ring-1 ring-violet-400/30'
+                  : 'border-zinc-700 text-zinc-500 hover:text-violet-400 hover:border-violet-500/30'
+              }`}>
+              <svg className="w-3.5 h-3.5" fill={onlyMarked ? 'currentColor' : 'none'}
+                viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
+              </svg>
+              {markedCount} đánh dấu
+            </button>
+          )}
+
+          {/* Filter: chỉ video đã lưu (⭐) */}
+          {bm && savedCount > 0 && (
             <button onClick={()=>setOnlyBookmarked(v=>!v)}
+              title="Chỉ hiện video đã gắn sao"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
                 onlyBookmarked
                   ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 ring-1 ring-amber-400/30'
@@ -219,9 +288,9 @@ const filtered = useMemo(() => videos.filter(v => {
               <svg className="w-3.5 h-3.5" fill={onlyBookmarked ? 'currentColor' : 'none'}
                 viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
+                  d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/>
               </svg>
-              {Object.keys(bookmarks).length} đánh dấu
+              {savedCount} đã lưu
             </button>
           )}
 
@@ -488,7 +557,7 @@ const filtered = useMemo(() => videos.filter(v => {
                         </div>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-zinc-600 font-mono text-xs">{idx+1}</td>
+                    <td className="py-3 px-3 text-zinc-600 font-mono text-xs">{indexMap[video.videoId]}</td>
                     <td className="py-3 px-3">
                       <div className="flex items-center gap-3">
                         {/* Thumbnail → mở YouTube */}
@@ -549,17 +618,36 @@ const filtered = useMemo(() => videos.filter(v => {
                     </td>
                     <td className="py-3 px-3 text-center font-mono text-xs text-zinc-500">{formatViews(video.viewCount)}</td>
                     <td className="py-3 px-2">
-                      <button
-                        onClick={e => { e.stopPropagation(); setDetailVideo(video) }}
-                        title="Xem chi tiết"
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600
-                          hover:text-violet-400 hover:bg-violet-500/10 border border-transparent
-                          hover:border-violet-500/30 transition-all">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                        </svg>
-                      </button>
+                      <div className="flex items-center gap-0.5">
+                        <CopyLinkBtn videoId={video.videoId} />
+                        {bm && (
+                          <button
+                            onClick={e => { e.stopPropagation(); bm.toggle(video, channelMeta || { name: channelName }) }}
+                            title={bm.isSaved(video.videoId) ? 'Đã lưu — nhấn để bỏ lưu' : 'Lưu vào mục Đã lưu'}
+                            className={`w-7 h-7 rounded-lg flex items-center justify-center border border-transparent transition-all ${
+                              bm.isSaved(video.videoId)
+                                ? 'text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/30'
+                                : 'text-zinc-600 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/30'
+                            }`}>
+                            <svg className="w-3.5 h-3.5" fill={bm.isSaved(video.videoId) ? 'currentColor' : 'none'}
+                              viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round"
+                                d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/>
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          onClick={e => { e.stopPropagation(); setDetailVideo(video) }}
+                          title="Xem chi tiết"
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600
+                            hover:text-violet-400 hover:bg-violet-500/10 border border-transparent
+                            hover:border-violet-500/30 transition-all">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   {expandedDesc === video.videoId && (
@@ -647,16 +735,33 @@ const filtered = useMemo(() => videos.filter(v => {
                     ))}
                   </div>
                 )}
-                <button
-                  onClick={e=>{ e.preventDefault(); e.stopPropagation(); setDetailVideo(video) }}
-                  className="self-start flex items-center gap-1 text-[10px] text-zinc-600
-                    hover:text-violet-400 transition-colors mt-0.5">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                  </svg>
-                  Chi tiết
-                </button>
+                <div className="flex items-center justify-between mt-0.5">
+                  <button
+                    onClick={e=>{ e.preventDefault(); e.stopPropagation(); setDetailVideo(video) }}
+                    className="self-start flex items-center gap-1 text-[10px] text-zinc-600
+                      hover:text-violet-400 transition-colors">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Chi tiết
+                  </button>
+                  {bm && (
+                    <button
+                      onClick={e=>{ e.preventDefault(); e.stopPropagation(); bm.toggle(video, channelMeta || { name: channelName }) }}
+                      title={bm.isSaved(video.videoId) ? 'Đã lưu — nhấn để bỏ lưu' : 'Lưu vào mục Đã lưu'}
+                      className={`flex items-center gap-1 text-[10px] transition-colors ${
+                        bm.isSaved(video.videoId) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'
+                      }`}>
+                      <svg className="w-3 h-3" fill={bm.isSaved(video.videoId) ? 'currentColor' : 'none'}
+                        viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round"
+                          d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/>
+                      </svg>
+                      {bm.isSaved(video.videoId) ? 'Đã lưu' : 'Lưu'}
+                    </button>
+                  )}
+                </div>
               </div>
             </a>
           ))}

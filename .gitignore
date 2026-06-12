@@ -21,6 +21,7 @@ rebuild.bat
 
 # App runtime
 backend/config.json
+backend/bookmarks.json
 backend/ytspy.log
 
 # Dev tools

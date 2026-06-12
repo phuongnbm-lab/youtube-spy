@@ -77,7 +77,7 @@ def _save_key_to_file(key: str):
 API_KEY = _load_saved_key() or os.getenv("YOUTUBE_API_KEY")
 ICT = timezone(timedelta(hours=7))
 DAYS_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
-APP_VERSION = "2026.05.46"
+APP_VERSION = "2026.05.47"
 
 
 # ── License ──────────────────────────────────────────────────────────────────
@@ -241,6 +241,7 @@ def get_uploads_playlist(youtube, channel_id: str) -> str:
     snippet = item["snippet"]
     stats = item.get("statistics", {})
     channel_meta = {
+        "channelId": channel_id,
         "name": snippet["title"],
         "thumbnail": snippet["thumbnails"].get("medium", snippet["thumbnails"].get("default", {})).get("url", ""),
         "description": snippet.get("description", "")[:120],
@@ -745,6 +746,49 @@ async def api_save_key(body: KeyBody):
     _save_key_to_file(trimmed)
     API_KEY = trimmed or None
     return {"ok": True}
+
+
+# ── Bookmarks (lưu link đã đánh dấu + ghi chú, bền vững cạnh EXE) ─────────────
+def _bookmarks_path() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), 'bookmarks.json')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'bookmarks.json')
+
+
+def _load_bookmarks() -> list:
+    try:
+        with open(_bookmarks_path(), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        return data.get('bookmarks', []) if isinstance(data, dict) else []
+    except Exception:
+        return []
+
+
+def _save_bookmarks(items: list):
+    try:
+        with open(_bookmarks_path(), 'w', encoding='utf-8') as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+class BookmarksBody(BaseModel):
+    bookmarks: list
+
+
+@app.get("/api/bookmarks")
+async def api_get_bookmarks():
+    """Trả về toàn bộ bookmark đã lưu."""
+    return {"bookmarks": _load_bookmarks()}
+
+
+@app.post("/api/bookmarks")
+async def api_save_bookmarks(body: BookmarksBody):
+    """Ghi đè toàn bộ danh sách bookmark (frontend gửi list mới mỗi lần thay đổi)."""
+    _save_bookmarks(body.bookmarks)
+    return {"ok": True, "count": len(body.bookmarks)}
 
 
 @app.get("/health")

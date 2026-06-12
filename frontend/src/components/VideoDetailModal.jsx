@@ -185,7 +185,7 @@ function exportSingleTxt(video, channelName) {
   URL.revokeObjectURL(url)
 }
 
-export default function VideoDetailModal({ video, onClose, channelName }) {
+export default function VideoDetailModal({ video, onClose, channelName, channelMeta, bm }) {
   const [thumbOpen, setThumbOpen] = useState(false)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -201,6 +201,8 @@ export default function VideoDetailModal({ video, onClose, channelName }) {
 
   const allTags = video.tags?.join(', ') || ''
   const url = `https://youtube.com/watch?v=${video.videoId}`
+  const saved = bm ? bm.isSaved(video.videoId) : false
+  const note = bm ? (bm.bookmarks.find(b => b.videoId === video.videoId)?.note || '') : ''
 
   return (
     <>
@@ -225,6 +227,22 @@ export default function VideoDetailModal({ video, onClose, channelName }) {
             <span className="text-sm font-semibold text-zinc-200">Chi tiết video</span>
           </div>
           <div className="flex items-center gap-2">
+            {bm && (
+              <button onClick={() => bm.toggle(video, channelMeta || { name: channelName })}
+                title={saved ? 'Bỏ lưu' : 'Lưu vào mục Đã lưu'}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                  saved
+                    ? 'border-amber-500/50 bg-amber-500/10 text-amber-300'
+                    : 'border-zinc-700 text-zinc-400 hover:text-amber-300 hover:border-amber-500/40'
+                }`}>
+                <svg className="w-3.5 h-3.5" fill={saved ? 'currentColor' : 'none'}
+                  viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
+                </svg>
+                {saved ? 'Đã lưu' : 'Lưu'}
+              </button>
+            )}
             <button onClick={() => exportSingleTxt(video, channelName)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border border-zinc-700
                 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-all">
@@ -293,6 +311,21 @@ export default function VideoDetailModal({ video, onClose, channelName }) {
               <CopyBtn text={url} label="Copy URL" />
             </div>
           </div>
+
+          {/* Ghi chú (chỉ khi đã lưu) */}
+          {bm && saved && (
+            <Section title="🔖 Ghi chú" accent="amber">
+              <textarea
+                value={note}
+                onChange={e => bm.setNote(video.videoId, e.target.value)}
+                placeholder="Thêm ghi chú cho video này — sẽ được lưu cùng bookmark..."
+                rows={3}
+                className="w-full resize-y bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5
+                  text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none
+                  focus:border-amber-500/60 transition-all leading-relaxed"
+              />
+            </Section>
+          )}
 
           {/* Title */}
           <Section title="📌 Tiêu đề" copyText={video.title} accent="violet">

@@ -25,6 +25,8 @@ import ChannelSearch from './components/ChannelSearch'
 import LicenseGate from './components/LicenseGate'
 import KeywordSearch from './components/KeywordSearch'
 import ThumbnailGallery from './components/ThumbnailGallery'
+import BookmarksTab from './components/BookmarksTab'
+import { useBookmarks } from './hooks/useBookmarks'
 
 function ErrorBanner({ message }) {
   return (
@@ -74,7 +76,8 @@ export default function App() {
   const [data, setData] = useState(null)
   const [showApiModal, setShowApiModal] = useState(false)
   const [showDonate, setShowDonate] = useState(false)
-  const [mode, setMode] = useState('analyze') // 'analyze' | 'search' | 'keyword' | 'thumbnail'
+  const [mode, setMode] = useState('analyze') // 'analyze' | 'search' | 'keyword' | 'thumbnail' | 'bookmarks'
+  const bm = useBookmarks()
   const [license, setLicense] = useState(null) // null=checking, {valid,reason,machine_id,...}
   const [updateInfo, setUpdateInfo] = useState(null) // null | {latest, release_url, download_url}
   const [updating, setUpdating] = useState(false)
@@ -460,7 +463,7 @@ export default function App() {
         <div className="flex justify-center">
           <div className="flex gap-1 p-1 bg-zinc-900 border border-zinc-800 rounded-xl">
             <button
-              onClick={() => { setMode('analyze'); setData(null); setError(null) }}
+              onClick={() => { setMode('analyze'); setError(null) }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 mode === 'analyze'
                   ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
@@ -474,7 +477,7 @@ export default function App() {
               Phân tích kênh
             </button>
             <button
-              onClick={() => { setMode('search'); setData(null); setError(null) }}
+              onClick={() => { setMode('search'); setError(null) }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 mode === 'search'
                   ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
@@ -488,7 +491,7 @@ export default function App() {
               Tìm kênh
             </button>
             <button
-              onClick={() => { setMode('keyword'); setData(null); setError(null) }}
+              onClick={() => { setMode('keyword'); setError(null) }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 mode === 'keyword'
                   ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
@@ -502,7 +505,7 @@ export default function App() {
               Keyword
             </button>
             <button
-              onClick={() => { setMode('thumbnail'); setData(null); setError(null) }}
+              onClick={() => { setMode('thumbnail'); setError(null) }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 mode === 'thumbnail'
                   ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
@@ -515,10 +518,40 @@ export default function App() {
               </svg>
               Thumbnail
             </button>
+            <button
+              onClick={() => { setMode('bookmarks'); setError(null) }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                mode === 'bookmarks'
+                  ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
+                  : 'text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              <svg className="w-4 h-4" fill={mode === 'bookmarks' ? 'currentColor' : 'none'}
+                viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
+              </svg>
+              Đã lưu
+              {bm.bookmarks.length > 0 && (
+                <span className={`text-[10px] font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center ${
+                  mode === 'bookmarks' ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-400'
+                }`}>
+                  {bm.bookmarks.length}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        {mode === 'thumbnail' ? (
+        {mode === 'bookmarks' ? (
+          <BookmarksTab
+            bm={bm}
+            onAnalyzeChannel={(channelId) => {
+              setMode('analyze')
+              handleSearch(channelId, 50)
+            }}
+          />
+        ) : mode === 'thumbnail' ? (
           <ThumbnailGallery
             apiBase={API_BASE}
             apiKey={localStorage.getItem('yt_api_key')}
@@ -641,7 +674,7 @@ export default function App() {
             </div>
 
             {/* ── Row 11: Video list ── */}
-            <VideoList videos={data.videos} channelName={data.channel?.name} />
+            <VideoList videos={data.videos} channelName={data.channel?.name} channelMeta={data.channel} bm={bm} />
 
             {/* ── Row 12: Compare ── */}
             <CompareSection
