@@ -76,5 +76,21 @@ export function useBookmarks() {
 
   const clear = useCallback(() => update([]), [update])
 
-  return { bookmarks, loaded, isSaved, toggle, remove, setNote, clear }
+  // Nhập danh sách từ file. Mặc định gộp (giữ cái cũ, thêm cái mới, bỏ trùng theo videoId).
+  // replace=true để ghi đè toàn bộ. Trả về số liệu để hiện thông báo.
+  const importMany = useCallback((incoming, { replace = false } = {}) => {
+    const valid = Array.isArray(incoming)
+      ? incoming.filter(b => b && typeof b.videoId === 'string' && b.videoId)
+      : []
+    if (replace) {
+      update(valid)
+      return { added: valid.length, skipped: 0, total: valid.length }
+    }
+    const have = new Set(bookmarks.map(b => b.videoId))
+    const toAdd = valid.filter(b => !have.has(b.videoId))
+    update([...toAdd, ...bookmarks])
+    return { added: toAdd.length, skipped: valid.length - toAdd.length, total: valid.length }
+  }, [bookmarks, update])
+
+  return { bookmarks, loaded, isSaved, toggle, remove, setNote, clear, importMany }
 }

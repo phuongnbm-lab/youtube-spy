@@ -1,4 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+
+function exportBookmarks(bookmarks) {
+  const blob = new Blob([JSON.stringify(bookmarks, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const date = new Date().toISOString().slice(0, 10)
+  a.href = url
+  a.download = `youtube-spy-bookmarks-${date}.json`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
 
 function formatDate(ts) {
   if (!ts) return ''
@@ -52,8 +65,64 @@ function NoteEditor({ value, onChange }) {
 }
 
 export default function BookmarksTab({ bm, onAnalyzeChannel }) {
-  const { bookmarks, loaded, remove, setNote, clear } = bm
+  const { bookmarks, loaded, remove, setNote, clear, importMany } = bm
   const [search, setSearch] = useState('')
+  const fileRef = useRef(null)
+
+  const handleImportFile = (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // reset để chọn lại đúng file vẫn chạy
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      let data
+      try {
+        data = JSON.parse(reader.result)
+      } catch {
+        alert('Không đọc được file — phải là file JSON xuất từ YouTube Spy.')
+        return
+      }
+      const list = Array.isArray(data) ? data : (Array.isArray(data?.bookmarks) ? data.bookmarks : null)
+      if (!list) {
+        alert('File không đúng định dạng bookmark.')
+        return
+      }
+      const res = importMany(list)
+      alert(`Đã nhập ${res.total} mục: thêm mới ${res.added}, bỏ qua ${res.skipped} (trùng).`)
+    }
+    reader.readAsText(file)
+  }
+
+  // Nút Xuất + Nhập (dùng chung cho cả màn trống lẫn toolbar)
+  const importExportButtons = ({ showExport = true } = {}) => (
+    <>
+      <input ref={fileRef} type="file" accept="application/json,.json"
+        onChange={handleImportFile} className="hidden" />
+      {showExport && (
+        <button onClick={() => exportBookmarks(bookmarks)} disabled={bookmarks.length === 0}
+          title="Tải toàn bộ bookmark ra file .json để backup / gửi cho người khác"
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-zinc-800
+            text-zinc-400 hover:text-emerald-400 hover:border-emerald-500/40 transition-all
+            disabled:opacity-40 disabled:hover:text-zinc-400 disabled:hover:border-zinc-800">
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Xuất
+        </button>
+      )}
+      <button onClick={() => fileRef.current?.click()}
+        title="Nhập bookmark từ file .json (gộp vào danh sách hiện có, tự bỏ trùng)"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-zinc-800
+          text-zinc-400 hover:text-sky-400 hover:border-sky-500/40 transition-all">
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        </svg>
+        Nhập
+      </button>
+    </>
+  )
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -112,6 +181,10 @@ export default function BookmarksTab({ bm, onAnalyzeChannel }) {
           Khi phân tích một kênh, nhấn ngôi sao ★ trên video (hoặc nút "Lưu" trong chi tiết)
           để lưu lại đây kèm ghi chú. Dữ liệu được giữ ngay cả khi thoát & mở lại app.
         </p>
+        <div className="flex items-center gap-2 mt-6">
+          {importExportButtons({ showExport: false })}
+        </div>
+        <p className="text-xs text-zinc-700 mt-3">Có file backup? Bấm "Nhập" để khôi phục.</p>
       </div>
     )
   }
@@ -148,6 +221,7 @@ export default function BookmarksTab({ bm, onAnalyzeChannel }) {
                 text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none
                 focus:border-violet-500 transition-all" />
           </div>
+          {importExportButtons()}
           <button onClick={() => { if (confirm('Xoá tất cả video đã lưu?')) clear() }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs border border-zinc-800
               text-zinc-500 hover:text-red-400 hover:border-red-500/40 transition-all">

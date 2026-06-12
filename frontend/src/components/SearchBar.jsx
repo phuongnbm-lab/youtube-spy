@@ -1,8 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
 
+// Các nấc số video; 0 = lấy tất cả (không giới hạn)
+const LIMIT_STOPS = [10, 20, 30, 50, 100, 200, 300, 500, 0]
+
 export default function SearchBar({ onSearch, onReset, loading, history = [] }) {
   const [channel, setChannel] = useState('')
-  const [limit, setLimit] = useState(50)
+  const [limitIdx, setLimitIdx] = useState(LIMIT_STOPS.length - 1) // mặc định: Tất cả
+  const limit = LIMIT_STOPS[limitIdx]
   const [showHistory, setShowHistory] = useState(false)
   const wrapRef = useRef(null)
 
@@ -139,17 +143,17 @@ export default function SearchBar({ onSearch, onReset, loading, history = [] }) 
           <span className="text-xs text-zinc-500 whitespace-nowrap w-28">Số video:</span>
           <input
             type="range"
-            min={10}
-            max={50}
-            step={5}
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
+            min={0}
+            max={LIMIT_STOPS.length - 1}
+            step={1}
+            value={limitIdx}
+            onChange={(e) => setLimitIdx(Number(e.target.value))}
             disabled={loading}
             className="flex-1 h-1.5 appearance-none rounded-full bg-zinc-700 accent-violet-500 cursor-pointer
               disabled:opacity-40"
           />
-          <span className="text-sm font-mono font-medium text-violet-400 w-12 text-right">
-            {limit} video
+          <span className="text-sm font-mono font-medium text-violet-400 w-16 text-right">
+            {limit === 0 ? 'Tất cả' : `${limit} video`}
           </span>
         </div>
       </div>

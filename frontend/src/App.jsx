@@ -191,13 +191,32 @@ export default function App() {
       const storedKey = localStorage.getItem('yt_api_key')
       if (storedKey) headers['X-API-Key'] = storedKey
 
-      const res  = await fetch(`${API_BASE}/api/analyze?channel=${encodeURIComponent(channel)}&limit=${limit}`, { headers })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail || 'Lỗi không xác định')
+      // Lấy "Tất cả" trên kênh lớn có thể chạy lâu — cho timeout 120s thay vì treo vô hạn
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 120_000)
+      let res
+      try {
+        res = await fetch(`${API_BASE}/api/analyze?channel=${encodeURIComponent(channel)}&limit=${limit}`, { headers, signal: controller.signal })
+      } finally {
+        clearTimeout(timer)
+      }
+
+      // Đọc body dưới dạng text trước để không vỡ khi server trả rỗng / không phải JSON
+      const raw = await res.text()
+      let json
+      try {
+        json = raw ? JSON.parse(raw) : null
+      } catch {
+        throw new Error(`Server trả về dữ liệu không hợp lệ (HTTP ${res.status}). ${raw.slice(0, 200)}`)
+      }
+      if (!res.ok) throw new Error((json && json.detail) || `Lỗi HTTP ${res.status}`)
+      if (!json) throw new Error('Server trả về rỗng — backend có thể đã tắt hoặc bị quá tải. Kiểm tra cửa sổ "YTSpy BACKEND".')
       setData(json)
       saveHistory(channel, json)
     } catch (e) {
-      setError(e.message)
+      setError(e.name === 'AbortError'
+        ? 'Quá thời gian chờ (120s). Kênh quá lớn — thử chọn số video nhỏ hơn thay vì "Tất cả".'
+        : e.message)
       setData(null)
     } finally {
       setLoading(false)

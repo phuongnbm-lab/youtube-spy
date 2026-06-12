@@ -77,7 +77,7 @@ def _save_key_to_file(key: str):
 API_KEY = _load_saved_key() or os.getenv("YOUTUBE_API_KEY")
 ICT = timezone(timedelta(hours=7))
 DAYS_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
-APP_VERSION = "2026.05.48"
+APP_VERSION = "2026.05.49"
 
 
 # ── License ──────────────────────────────────────────────────────────────────
@@ -443,14 +443,18 @@ def fetch_videos(youtube, playlist_id: str, channel_id: str, limit: int) -> tupl
 @app.get("/api/analyze")
 async def analyze(
     channel: str = Query(..., description="URL, @handle, hoặc Channel ID"),
-    limit: int = Query(50, ge=10, le=50),
+    limit: int = Query(50, ge=0, le=10000, description="0 = lấy tất cả video"),
     x_api_key: str | None = Header(default=None),
 ):
     youtube = get_youtube(x_api_key)
     try:
         channel_id = resolve_channel_id(youtube, channel)
         playlist_id, channel_meta = get_uploads_playlist(youtube, channel_id)
-        videos, fetch_method = fetch_videos(youtube, playlist_id, channel_id, limit)
+        # limit = 0 nghĩa là "tất cả" — lấy đến hết playlist nhưng chặn trần an toàn
+        # (tránh treo / cháy quota với kênh siêu lớn). Vòng lặp tự dừng khi hết trang.
+        ALL_VIDEOS_CAP = 2000
+        effective_limit = limit if limit > 0 else ALL_VIDEOS_CAP
+        videos, fetch_method = fetch_videos(youtube, playlist_id, channel_id, effective_limit)
 
         if not videos:
             raise HTTPException(status_code=404, detail="Không thể lấy video. Kênh có thể đang ở chế độ riêng tư hoặc chưa có video công khai.")

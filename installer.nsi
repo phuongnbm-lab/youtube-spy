@@ -1,6 +1,6 @@
 ; YouTube Spy — NSIS One-Click Installer (style electron-builder)
 !define APP_NAME      "YouTube Spy"
-!define APP_VERSION   "2026.05.48"
+!define APP_VERSION   "2026.05.49"
 !define APP_EXE       "YouTube Spy.exe"
 !define INSTALL_DIR   "$APPDATA\YouTube Spy"
 !define PUBLISHER     "Bá Phương"
@@ -9,7 +9,7 @@
 
 ; ── Cấu hình chung ────────────────────────────────────────────────────────────
 Name "${APP_NAME}"
-OutFile "dist\YouTube Spy Setup 2026.05.48.exe"
+OutFile "dist\YouTube Spy Setup 2026.05.49.exe"
 InstallDir "${INSTALL_DIR}"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
