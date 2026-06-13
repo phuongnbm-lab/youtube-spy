@@ -22,7 +22,11 @@ rebuild.bat
 # App runtime
 backend/config.json
 backend/bookmarks.json
+backend/hidden.json
 backend/ytspy.log
+
+# Local release folders
+release_v*/
 
 # Dev tools
 disable_statusline.bat

@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from 'react'
 // Các nấc số video; 0 = lấy tất cả (không giới hạn)
 const LIMIT_STOPS = [10, 20, 30, 50, 100, 200, 300, 500, 0]
 
-export default function SearchBar({ onSearch, onReset, loading, history = [] }) {
+export default function SearchBar({ onSearch, onReset, loading, history = [], onRemoveHistory }) {
   const [channel, setChannel] = useState('')
   const [limitIdx, setLimitIdx] = useState(LIMIT_STOPS.length - 1) // mặc định: Tất cả
   const limit = LIMIT_STOPS[limitIdx]
@@ -85,26 +85,43 @@ export default function SearchBar({ onSearch, onReset, loading, history = [] }) 
                   <span className="text-[10px] text-zinc-600 font-medium uppercase tracking-wider">Kênh đã tra cứu</span>
                 </div>
                 {filtered.slice(0, 8).map((entry) => (
-                  <button
+                  <div
                     key={entry.channel}
-                    type="button"
-                    onClick={() => pickHistory(entry)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-800 transition-colors text-left"
+                    className="group/item w-full flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-800 transition-colors"
                   >
-                    {entry.thumbnail ? (
-                      <img src={entry.thumbnail} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-zinc-700"/>
-                    ) : (
-                      <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
-                        <svg className="w-3 h-3 text-zinc-600" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-                        </svg>
+                    <button
+                      type="button"
+                      onClick={() => pickHistory(entry)}
+                      className="flex-1 min-w-0 flex items-center gap-2.5 text-left"
+                    >
+                      {entry.thumbnail ? (
+                        <img src={entry.thumbnail} alt="" className="w-6 h-6 rounded-full object-cover shrink-0 border border-zinc-700"/>
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center shrink-0">
+                          <svg className="w-3 h-3 text-zinc-600" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+                          </svg>
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-zinc-300 truncate">{entry.name}</p>
+                        <p className="text-[10px] text-zinc-600 font-mono truncate">{entry.channel}</p>
                       </div>
+                    </button>
+                    {onRemoveHistory && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onRemoveHistory(entry.channel) }}
+                        title="Xoá khỏi lịch sử"
+                        className="shrink-0 w-6 h-6 flex items-center justify-center rounded-md text-zinc-600
+                          hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover/item:opacity-100 transition-all"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-zinc-300 truncate">{entry.name}</p>
-                      <p className="text-[10px] text-zinc-600 font-mono truncate">{entry.channel}</p>
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}

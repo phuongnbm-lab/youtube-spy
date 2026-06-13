@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import SearchBar from './components/SearchBar'
 import StatsCards from './components/StatsCards'
 import HourChart from './components/HourChart'
@@ -27,6 +27,8 @@ import KeywordSearch from './components/KeywordSearch'
 import ThumbnailGallery from './components/ThumbnailGallery'
 import BookmarksTab from './components/BookmarksTab'
 import { useBookmarks } from './hooks/useBookmarks'
+import { useHidden } from './hooks/useHidden'
+import HiddenTab from './components/HiddenTab'
 
 function ErrorBanner({ message }) {
   return (
@@ -76,8 +78,48 @@ export default function App() {
   const [data, setData] = useState(null)
   const [showApiModal, setShowApiModal] = useState(false)
   const [showDonate, setShowDonate] = useState(false)
-  const [mode, setMode] = useState('analyze') // 'analyze' | 'search' | 'keyword' | 'thumbnail' | 'bookmarks'
+  const [mode, setMode] = useState('analyze') // 'analyze' | 'search' | 'keyword' | 'thumbnail' | 'bookmarks' | 'hidden'
   const bm = useBookmarks()
+  const hd = useHidden()
+  const [locateId, setLocateId] = useState(null)  // videoId cần cuộn tới + đánh sáng sau khi phân tích
+
+  // Lịch sử chuyển tab để hỗ trợ nút Back (giữ nguyên trạng thái mỗi tab)
+  const [modeStack, setModeStack] = useState([])
+  const prevMode = useRef(mode)
+  const isBack = useRef(false)
+  useEffect(() => {
+    if (prevMode.current === mode) return
+    const from = prevMode.current      // chụp lại trước khi gán (updater đọc trễ sẽ sai)
+    prevMode.current = mode
+    if (isBack.current) {
+      isBack.current = false           // lần đổi này do Back gây ra → không ghi vào stack
+    } else {
+      setModeStack(s => [...s, from])
+    }
+  }, [mode])
+  const goBack = () => {
+    if (modeStack.length === 0) return
+    isBack.current = true
+    setMode(modeStack[modeStack.length - 1])
+    setModeStack(s => s.slice(0, -1))
+  }
+
+  // Giữ vị trí thanh cuộn riêng cho từng tab (khôi phục khi back/đổi tab)
+  const scrollPos = useRef({})
+  const scrollModeRef = useRef(mode)
+  useEffect(() => {
+    const onScroll = () => { scrollPos.current[scrollModeRef.current] = window.scrollY }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+  useLayoutEffect(() => {
+    scrollModeRef.current = mode               // cập nhật trước để listener ghi đúng tab
+    // Đang truy xuất 1 video cụ thể (locateId) → để VideoList tự cuộn tới, đừng khôi phục
+    if (mode === 'analyze' && locateId) return
+    // 'instant' để không bị trượt mượt (html có scroll-behavior: smooth toàn cục)
+    window.scrollTo({ top: scrollPos.current[mode] ?? 0, behavior: 'instant' })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, locateId])
   const [license, setLicense] = useState(null) // null=checking, {valid,reason,machine_id,...}
   const [updateInfo, setUpdateInfo] = useState(null) // null | {latest, release_url, download_url}
   const [updating, setUpdating] = useState(false)
@@ -183,6 +225,12 @@ export default function App() {
     localStorage.setItem('yt_channel_history', JSON.stringify(updated))
   }
 
+  const removeHistory = (channelInput) => {
+    const updated = history.filter(h => h.channel !== channelInput)
+    setHistory(updated)
+    localStorage.setItem('yt_channel_history', JSON.stringify(updated))
+  }
+
   const handleSearch = async (channel, limit) => {
     setLoading(true)
     setError(null)
@@ -223,6 +271,14 @@ export default function App() {
     }
   }
 
+  // Mở Phân tích kênh (tải Tất cả video) rồi cuộn tới + đánh sáng đúng video
+  const openChannelVideo = (channelId, videoId) => {
+    if (!channelId) return
+    setMode('analyze')
+    setLocateId(videoId || null)
+    handleSearch(channelId, 0)   // limit 0 = Tất cả
+  }
+
   // License checking screen
   if (license === null) {
     return (
@@ -250,9 +306,96 @@ export default function App() {
     )
   }
 
+  const navTabs = [
+    { key: 'analyze',   label: 'Phân tích kênh', d: 'M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z' },
+    { key: 'search',    label: 'Tìm kênh',       d: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0016.803 15.803z' },
+    { key: 'keyword',   label: 'Keyword',        d: 'M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4' },
+    { key: 'thumbnail', label: 'Thumbnail',      d: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
+    { key: 'bookmarks', label: 'Bookmark',       d: 'M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z', fillWhenActive: true },
+    { key: 'hidden',    label: 'Đã ẩn',          d: 'M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88' },
+  ]
+
   return (
     <div className="min-h-screen bg-zinc-950">
       <TranslateTooltip />
+
+      {/* Thanh tab dọc cố định mép phải (gần thanh cuộn) */}
+      <nav className="hidden lg:flex fixed right-2 top-1/2 -translate-y-1/2 z-40 flex-col gap-1.5
+        p-1.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 backdrop-blur-sm shadow-2xl">
+        {/* Back — quay lại tab trước (giữ nguyên trạng thái) */}
+        {modeStack.length > 0 && (
+          <>
+            <button
+              onClick={goBack}
+              title="Quay lại tab trước"
+              className="group relative w-10 h-10 flex items-center justify-center rounded-xl
+                text-zinc-400 hover:text-violet-300 hover:bg-violet-500/10 transition-all"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+              </svg>
+              <span className="pointer-events-none absolute right-full mr-2 px-2 py-1 rounded-md bg-zinc-800
+                text-xs text-zinc-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                Quay lại
+              </span>
+            </button>
+            <div className="h-px bg-zinc-800 mx-1.5 my-0.5" />
+          </>
+        )}
+
+        {/* Home — lên đầu trang + về Phân tích kênh */}
+        <button
+          onClick={() => { scrollPos.current['analyze'] = 0; setMode('analyze'); setError(null); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+          title="Home — Lên đầu trang"
+          className="group relative w-10 h-10 flex items-center justify-center rounded-xl
+            text-zinc-500 hover:text-violet-300 hover:bg-violet-500/10 transition-all"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round"
+              d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+          <span className="pointer-events-none absolute right-full mr-2 px-2 py-1 rounded-md bg-zinc-800
+            text-xs text-zinc-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+            Home
+          </span>
+        </button>
+        <div className="h-px bg-zinc-800 mx-1.5 my-0.5" />
+        {navTabs.map(t => {
+          const active = mode === t.key
+          return (
+            <button
+              key={t.key}
+              onClick={() => { setMode(t.key); setError(null) }}
+              title={t.label}
+              className={`group relative w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+                active ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
+                       : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
+              }`}
+            >
+              <svg className="w-5 h-5" fill={t.fillWhenActive && active ? 'currentColor' : 'none'}
+                viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d={t.d} />
+              </svg>
+              {t.key === 'bookmarks' && bm.bookmarks.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-bold min-w-4 h-4 px-1 rounded-full
+                  flex items-center justify-center bg-amber-500 text-zinc-900">
+                  {bm.bookmarks.length}
+                </span>
+              )}
+              {t.key === 'hidden' && hd.hidden.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 text-[9px] font-bold min-w-4 h-4 px-1 rounded-full
+                  flex items-center justify-center bg-red-500 text-white">
+                  {hd.hidden.length}
+                </span>
+              )}
+              <span className="pointer-events-none absolute right-full mr-2 px-2 py-1 rounded-md bg-zinc-800
+                text-xs text-zinc-200 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                {t.label}
+              </span>
+            </button>
+          )
+        })}
+      </nav>
       {showApiModal && <ApiKeyModal onClose={() => setShowApiModal(false)} />}
 
       {/* Update banner */}
@@ -550,7 +693,7 @@ export default function App() {
                 <path strokeLinecap="round" strokeLinejoin="round"
                   d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
               </svg>
-              Đã lưu
+              Bookmark
               {bm.bookmarks.length > 0 && (
                 <span className={`text-[10px] font-bold min-w-4 h-4 px-1 rounded-full flex items-center justify-center ${
                   mode === 'bookmarks' ? 'bg-white/25 text-white' : 'bg-amber-500/20 text-amber-400'
@@ -562,48 +705,51 @@ export default function App() {
           </div>
         </div>
 
-        {mode === 'bookmarks' ? (
+        {/* Các tab luôn được mount, chỉ ẩn/hiện bằng `hidden` để giữ nguyên trạng thái khi quay lại */}
+        <div hidden={mode !== 'hidden'}>
+          <HiddenTab hd={hd} onOpenChannelVideo={openChannelVideo} />
+        </div>
+
+        <div hidden={mode !== 'bookmarks'}>
           <BookmarksTab
             bm={bm}
-            onAnalyzeChannel={(channelId) => {
-              setMode('analyze')
-              handleSearch(channelId, 50)
-            }}
+            hd={hd}
+            onAnalyzeChannel={(channelId) => openChannelVideo(channelId, null)}
+            onOpenChannelVideo={openChannelVideo}
           />
-        ) : mode === 'thumbnail' ? (
+        </div>
+
+        <div hidden={mode !== 'thumbnail'}>
           <ThumbnailGallery
             apiBase={API_BASE}
             apiKey={localStorage.getItem('yt_api_key')}
-            onAnalyzeChannel={(channelId) => {
-              setMode('analyze')
-              handleSearch(channelId, 50)
-            }}
+            onAnalyzeChannel={(channelId) => openChannelVideo(channelId, null)}
           />
-        ) : mode === 'keyword' ? (
+        </div>
+
+        <div hidden={mode !== 'keyword'}>
           <KeywordSearch
             apiBase={API_BASE}
             apiKey={localStorage.getItem('yt_api_key')}
-            onAnalyzeChannel={(channelId) => {
-              setMode('analyze')
-              handleSearch(channelId, 50)
-            }}
+            onAnalyzeChannel={(channelId) => openChannelVideo(channelId, null)}
           />
-        ) : mode === 'search' ? (
+        </div>
+
+        <div hidden={mode !== 'search'}>
           <ChannelSearch
             apiBase={API_BASE}
             apiKey={localStorage.getItem('yt_api_key')}
-            onAnalyze={(channelId) => {
-              setMode('analyze')
-              handleSearch(channelId, 50)
-            }}
+            onAnalyze={(channelId) => openChannelVideo(channelId, null)}
           />
-        ) : (
-          <>
+        </div>
+
+        <div hidden={mode !== 'analyze'} className="space-y-5">
         <SearchBar
           onSearch={handleSearch}
           onReset={() => { setData(null); setError(null) }}
           loading={loading}
           history={history}
+          onRemoveHistory={removeHistory}
         />
 
         {error && <ErrorBanner message={error} />}
@@ -693,7 +839,8 @@ export default function App() {
             </div>
 
             {/* ── Row 11: Video list ── */}
-            <VideoList videos={data.videos} channelName={data.channel?.name} channelMeta={data.channel} bm={bm} />
+            <VideoList videos={data.videos} channelName={data.channel?.name} channelMeta={data.channel} bm={bm} hd={hd}
+              locateId={locateId} />
 
             {/* ── Row 12: Compare ── */}
             <CompareSection
@@ -702,8 +849,7 @@ export default function App() {
             />
           </div>
         )}
-          </>
-        )}
+        </div>
       </main>
 
       {/* Footer */}

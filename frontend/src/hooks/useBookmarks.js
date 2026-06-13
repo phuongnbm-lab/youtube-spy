@@ -59,6 +59,8 @@ export function useBookmarks() {
         channelId: channel.channelId || channel.id || '',
         channelName: channel.name || channel.channelName || 'Kênh khác',
         channelThumbnail: channel.thumbnail || '',
+        originalIndex: video.originalIndex ?? null,
+        color: video.color || 'amber',
         note: '',
         savedAt: Date.now(),
       }
@@ -70,9 +72,35 @@ export function useBookmarks() {
     update(prev => prev.filter(b => b.videoId !== videoId))
   }, [update])
 
+  const setColor = useCallback((videoId, color) => {
+    update(prev => prev.map(b => b.videoId === videoId ? { ...b, color } : b))
+  }, [update])
+
+  const setStatus = useCallback((videoId, status) => {
+    update(prev => prev.map(b => b.videoId === videoId ? { ...b, status } : b))
+  }, [update])
+
   const setNote = useCallback((videoId, note) => {
     update(prev => prev.map(b => b.videoId === videoId ? { ...b, note } : b))
   }, [update])
+
+  // Điền số thứ tự gốc + channelId còn thiếu cho entry cũ (đối chiếu kênh đang xem)
+  const backfillIndex = useCallback((idxMap, channelId) => {
+    setBookmarks(prev => {
+      let changed = false
+      const next = prev.map(b => {
+        if (idxMap[b.videoId] == null) return b
+        const patch = {}
+        if (b.originalIndex == null) patch.originalIndex = idxMap[b.videoId]
+        if (!b.channelId && channelId) patch.channelId = channelId
+        if (Object.keys(patch).length === 0) return b
+        changed = true
+        return { ...b, ...patch }
+      })
+      if (changed) persist(next)
+      return changed ? next : prev
+    })
+  }, [persist])
 
   const clear = useCallback(() => update([]), [update])
 
@@ -92,5 +120,5 @@ export function useBookmarks() {
     return { added: toAdd.length, skipped: valid.length - toAdd.length, total: valid.length }
   }, [bookmarks, update])
 
-  return { bookmarks, loaded, isSaved, toggle, remove, setNote, clear, importMany }
+  return { bookmarks, loaded, isSaved, toggle, remove, setColor, setStatus, setNote, clear, importMany, backfillIndex }
 }

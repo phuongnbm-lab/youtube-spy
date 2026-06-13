@@ -114,7 +114,7 @@ function exportTxt(videos, channelName) {
   URL.revokeObjectURL(url)
 }
 
-export default function VideoList({ videos, channelName, channelMeta, bm }) {
+export default function VideoList({ videos, channelName, channelMeta, bm, hd, locateId, onLocated }) {
   const [search, setSearch] = useState('')
   const [searchIn, setSearchIn] = useState({ title: true, description: true, tags: true })
   const [hourFrom, setHourFrom] = useState(0)
@@ -123,32 +123,33 @@ export default function VideoList({ videos, channelName, channelMeta, bm }) {
   const [activeMonths, setActiveMonths] = useState([])   // [] = all
   const [activeYears, setActiveYears] = useState([])     // [] = all
   const [videoType, setVideoType] = useState('all')      // 'all' | 'short' | 'long'
-  const [onlyBookmarked, setOnlyBookmarked] = useState(false)  // ⭐ đã lưu (persistent)
-  const [onlyMarked, setOnlyMarked] = useState(false)          // 🎀 đánh dấu màu (session)
+  const [onlyBookmarked, setOnlyBookmarked] = useState(false)  // 🔖 Bookmark (đã lưu, bền vững)
   const [showFilters, setShowFilters] = useState(false)
   const [viewMode, setViewMode] = useState('table')      // 'table' | 'grid'
   const [sortBy, setSortBy] = useState('default')        // 'default' | 'views_desc' | 'views_asc'
   const [expandedDesc, setExpandedDesc] = useState(null)
   const [detailVideo, setDetailVideo] = useState(null)
-  const [bookmarks, setBookmarks] = useState({})  // videoId → colorKey
-  const [openPickerId, setOpenPickerId] = useState(null)
+  const [showHidden, setShowHidden] = useState(false)  // panel khôi phục video đã ẩn
+  const [openPickerId, setOpenPickerId] = useState(null)  // video đang mở bảng chọn màu
+  const [flashId, setFlashId] = useState(null)  // video đang được đánh sáng (truy xuất từ Bookmark/Đã ẩn)
 
-  const toggleBookmark = (e, videoId) => {
+  // Map videoId → màu bookmark (mặc định amber nếu chưa đặt)
+  const bmColorMap = useMemo(() => {
+    const m = {}
+    if (bm) bm.bookmarks.forEach(b => { m[b.videoId] = b.color || 'amber' })
+    return m
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bm ? bm.bookmarks.map(b => `${b.videoId}:${b.color || 'amber'}`).join(',') : ''])
+
+  // Bấm bookmark: chưa lưu → lưu + mở bảng màu; đã lưu → mở bảng màu; Ctrl/Cmd+Click → bỏ
+  const toggleBookmark = (e, video) => {
     e.stopPropagation()
-if (bookmarks[videoId]) {
-      setOpenPickerId(prev => prev === videoId ? null : videoId)
-    } else {
-      setBookmarks(prev => ({ ...prev, [videoId]: 'amber' }))
-      setOpenPickerId(videoId)
+    if (!bm) return
+    if ((e.ctrlKey || e.metaKey) && bm.isSaved(video.videoId)) {
+      bm.remove(video.videoId); setOpenPickerId(null); return
     }
-  }
-  const setBookmarkColor = (videoId, colorKey) => {
-    setBookmarks(prev => ({ ...prev, [videoId]: colorKey }))
-    setOpenPickerId(null)
-  }
-  const removeBookmark = (videoId) => {
-    setBookmarks(prev => { const n = { ...prev }; delete n[videoId]; return n })
-    setOpenPickerId(null)
+    if (!bm.isSaved(video.videoId)) bm.toggle(withIndex(video), channelMeta || { name: channelName })
+    setOpenPickerId(prev => prev === video.videoId ? null : video.videoId)
   }
 
   // Số thứ tự gốc của từng video (cố định, không đổi khi lọc/sắp xếp)
@@ -158,11 +159,47 @@ if (bookmarks[videoId]) {
     return m
   }, [videos])
 
+  // Gắn số thứ tự gốc khi lưu/ẩn để cửa sổ "Bookmark"/"Đã ẩn" vẫn hiện đúng số
+  const withIndex = (v) => ({ ...v, originalIndex: indexMap[v.videoId] })
+
+  // Backfill số thứ tự gốc + channelId cho các entry cũ (đối chiếu kênh đang xem)
+  useEffect(() => {
+    const cid = channelMeta?.channelId || channelMeta?.id || ''
+    bm?.backfillIndex?.(indexMap, cid)
+    hd?.backfillIndex?.(indexMap, cid)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [indexMap])
+
+  // Truy xuất từ Bookmark/Đã ẩn: cuộn tới + đánh sáng đúng video
+  // (không dùng cờ "đã xử lý" để tránh StrictMode gọi 2 lần làm bỏ qua lần cuộn)
+  useEffect(() => {
+    if (!locateId) return
+    if (!videos.some(v => v.videoId === locateId)) return  // không thuộc kênh đang xem
+    setViewMode('table')   // đảm bảo có hàng để cuộn tới (grid không có id hàng)
+
+    let raf, tries = 0
+    const timers = []
+    const seek = () => {
+      const el = document.getElementById(`vrow-${locateId}`)
+      if (!el) { if (tries++ < 120) raf = requestAnimationFrame(seek); return }  // chờ hàng render
+      // cuộn lần đầu (mượt) rồi chỉnh lại tức thì để bù xô lệch do ảnh tải/reflow
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setFlashId(locateId)
+      ;[400, 800, 1300].forEach(d => timers.push(setTimeout(() => {
+        document.getElementById(`vrow-${locateId}`)?.scrollIntoView({ behavior: 'instant', block: 'center' })
+      }, d)))
+      timers.push(setTimeout(() => setFlashId(null), 3200))
+    }
+    raf = requestAnimationFrame(seek)
+    return () => { cancelAnimationFrame(raf); timers.forEach(clearTimeout) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locateId, videos])
+
   // Derived unique months/years from data
   const allMonths = useMemo(() => [...new Set(videos.map(v => v.month))].sort((a,b)=>a-b), [videos])
   const allYears  = useMemo(() => [...new Set(videos.map(v => v.year))].sort((a,b)=>b-a), [videos])
 
-  // Đóng color picker khi click ra ngoài
+  // Đóng bảng chọn màu khi click ra ngoài
   useEffect(() => {
     if (!openPickerId) return
     const handler = () => setOpenPickerId(null)
@@ -190,22 +227,20 @@ if (bookmarks[videoId]) {
     setVideoType('all')
   }
 
-  const bookmarkIds = Object.keys(bookmarks)
   const savedKey = bm ? bm.bookmarks.map(b => b.videoId).join(',') : ''
   const savedCount = bm ? videos.filter(v => bm.isSaved(v.videoId)).length : 0
-  const markedCount = bookmarkIds.length
 
   // Tắt bộ lọc nếu không còn video tương ứng (tránh kẹt ở danh sách rỗng)
   useEffect(() => {
     if (onlyBookmarked && savedCount === 0) setOnlyBookmarked(false)
   }, [onlyBookmarked, savedCount])
-  useEffect(() => {
-    if (onlyMarked && markedCount === 0) setOnlyMarked(false)
-  }, [onlyMarked, markedCount])
+
+const hiddenKey = hd ? hd.hidden.map(h => h.videoId).join(',') : ''
 
 const filtered = useMemo(() => videos.filter(v => {
+    // video đang truy xuất từ Bookmark/Đã ẩn → bỏ qua riêng bộ lọc "ẩn" (vẫn theo các lọc khác)
+    if (hd && hd.isHidden(v.videoId) && v.videoId !== locateId) return false
     if (onlyBookmarked && !(bm && bm.isSaved(v.videoId))) return false
-    if (onlyMarked && !bookmarks[v.videoId]) return false
     if (search.trim()) {
       const q = search.toLowerCase()
       const inTitle = searchIn.title && v.title.toLowerCase().includes(q)
@@ -221,7 +256,7 @@ const filtered = useMemo(() => videos.filter(v => {
     if (videoType === 'long'  && v.isShort)  return false
     return true
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [videos, onlyBookmarked, onlyMarked, bookmarkIds.join(','), savedKey, search, searchIn, hourFrom, hourTo, activeDays, activeMonths, activeYears, videoType])
+  }), [videos, hiddenKey, locateId, onlyBookmarked, savedKey, search, searchIn, hourFrom, hourTo, activeDays, activeMonths, activeYears, videoType])
 
   const sorted = (() => {
     if (sortBy === 'views_desc') return [...filtered].sort((a, b) => parseInt(b.viewCount || 0) - parseInt(a.viewCount || 0))
@@ -258,28 +293,10 @@ const filtered = useMemo(() => videos.filter(v => {
             </button>
           </div>
 
-          {/* Filter: chỉ video đã đánh dấu màu (🎀 Bookmark) */}
-          {markedCount > 0 && (
-            <button onClick={()=>setOnlyMarked(v=>!v)}
-              title="Chỉ hiện video đã đánh dấu màu"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
-                onlyMarked
-                  ? 'bg-violet-500/20 border-violet-400/60 text-violet-300 ring-1 ring-violet-400/30'
-                  : 'border-zinc-700 text-zinc-500 hover:text-violet-400 hover:border-violet-500/30'
-              }`}>
-              <svg className="w-3.5 h-3.5" fill={onlyMarked ? 'currentColor' : 'none'}
-                viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
-              </svg>
-              {markedCount} đánh dấu
-            </button>
-          )}
-
-          {/* Filter: chỉ video đã lưu (⭐) */}
+          {/* Filter: chỉ video đã Bookmark */}
           {bm && savedCount > 0 && (
             <button onClick={()=>setOnlyBookmarked(v=>!v)}
-              title="Chỉ hiện video đã gắn sao"
+              title="Chỉ hiện video đã Bookmark"
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
                 onlyBookmarked
                   ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 ring-1 ring-amber-400/30'
@@ -288,9 +305,26 @@ const filtered = useMemo(() => videos.filter(v => {
               <svg className="w-3.5 h-3.5" fill={onlyBookmarked ? 'currentColor' : 'none'}
                 viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round"
-                  d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/>
+                  d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
               </svg>
-              {savedCount} đã lưu
+              {savedCount} Bookmark
+            </button>
+          )}
+
+          {/* Khu video đã ẩn */}
+          {hd && hd.hidden.length > 0 && (
+            <button onClick={()=>setShowHidden(v=>!v)}
+              title="Xem / khôi phục video đã ẩn"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
+                showHidden
+                  ? 'bg-red-500/20 border-red-400/60 text-red-300 ring-1 ring-red-400/30'
+                  : 'border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-500/30'
+              }`}>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+              </svg>
+              {hd.hidden.length} đã ẩn
             </button>
           )}
 
@@ -484,6 +518,45 @@ const filtered = useMemo(() => videos.filter(v => {
         </div>
       )}
 
+      {/* Panel khôi phục video đã ẩn */}
+      {hd && showHidden && hd.hidden.length > 0 && (
+        <div className="bg-zinc-900 rounded-xl p-4 border border-red-500/20 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-zinc-400">
+              Video đã ẩn ({hd.hidden.length}) — bấm để hiện lại
+            </span>
+            <button onClick={()=>{ hd.clear(); setShowHidden(false) }}
+              className="text-[11px] text-zinc-500 hover:text-red-400 transition-colors">
+              Hiện lại tất cả
+            </button>
+          </div>
+          <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+            {hd.hidden.map(item => (
+              <div key={item.videoId}
+                className="group/h flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-zinc-800/60 transition-colors">
+                <a href={item.url} target="_blank" rel="noopener noreferrer"
+                  className="shrink-0 rounded overflow-hidden">
+                  {item.thumbnail
+                    ? <img src={item.thumbnail} alt="" className="w-16 h-9 object-cover opacity-70 hover:opacity-100 transition-opacity"/>
+                    : <div className="w-16 h-9 bg-zinc-800"/>}
+                </a>
+                <p className="flex-1 min-w-0 text-xs text-zinc-400 line-clamp-2 leading-relaxed">{item.title || item.videoId}</p>
+                <button onClick={()=>hd.unhide(item.videoId)}
+                  title="Hiện lại video này"
+                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[11px] border border-zinc-700
+                    text-zinc-500 hover:text-emerald-400 hover:border-emerald-500/40 transition-all">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                  Hiện lại
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* TABLE VIEW */}
       {viewMode === 'table' && (
         <div className="overflow-x-auto">
@@ -504,30 +577,35 @@ const filtered = useMemo(() => videos.filter(v => {
               {sorted.map((video, idx) => (
                 <React.Fragment key={video.videoId}>
                   <tr
+                    id={`vrow-${video.videoId}`}
                     className={`group transition-colors cursor-pointer border-l-2 ${
-                      bookmarks[video.videoId]
-                        ? `${colorOf(bookmarks[video.videoId]).bg} ${colorOf(bookmarks[video.videoId]).hbg} ${colorOf(bookmarks[video.videoId]).border}`
-                        : 'hover:bg-zinc-900/60 border-l-transparent'
+                      flashId === video.videoId
+                        ? 'ring-2 ring-violet-400 ring-inset bg-violet-500/15'
+                        : bm && bm.isSaved(video.videoId)
+                          ? `${colorOf(bmColorMap[video.videoId]).bg} ${colorOf(bmColorMap[video.videoId]).hbg} ${colorOf(bmColorMap[video.videoId]).border}`
+                          : 'hover:bg-zinc-900/60 border-l-transparent'
                     }`}
                     onClick={()=>setExpandedDesc(expandedDesc===video.videoId ? null : video.videoId)}>
-                    {/* Bookmark button + color picker */}
+                    {/* Bookmark (lưu bền vững, chọn được màu) */}
                     <td className="py-3 pl-2 pr-0 relative" onClick={e=>e.stopPropagation()}>
-                      <button
-                        onClick={e=>toggleBookmark(e, video.videoId)}
-                        title={bookmarks[video.videoId] ? 'Đổi màu / Bỏ đánh dấu' : 'Đánh dấu'}
-                        className={`w-5 h-5 flex items-center justify-center rounded transition-all ${
-                          bookmarks[video.videoId]
-                            ? colorOf(bookmarks[video.videoId]).icon
-                            : 'text-zinc-700 hover:text-amber-400 opacity-0 group-hover:opacity-100'
-                        }`}>
-                        <svg className="w-3.5 h-3.5" fill={bookmarks[video.videoId] ? 'currentColor' : 'none'}
-                          viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round"
-                            d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
-                        </svg>
-                      </button>
-                      {/* Color picker popover */}
-                      {openPickerId === video.videoId && (
+                      {bm && (
+                        <button
+                          onClick={e=>toggleBookmark(e, video)}
+                          title={bm.isSaved(video.videoId) ? 'Đổi màu • Ctrl+Click để bỏ Bookmark' : 'Bookmark video này'}
+                          className={`w-5 h-5 flex items-center justify-center rounded transition-all ${
+                            bm.isSaved(video.videoId)
+                              ? colorOf(bmColorMap[video.videoId]).icon
+                              : 'text-zinc-700 hover:text-amber-400 opacity-0 group-hover:opacity-100'
+                          }`}>
+                          <svg className="w-3.5 h-3.5" fill={bm.isSaved(video.videoId) ? 'currentColor' : 'none'}
+                            viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round"
+                              d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
+                          </svg>
+                        </button>
+                      )}
+                      {/* Bảng chọn màu */}
+                      {openPickerId === video.videoId && bm && (
                         <div
                           onMouseDown={e => e.stopPropagation()}
                           className="absolute left-6 top-1/2 -translate-y-1/2 z-50
@@ -535,19 +613,19 @@ const filtered = useMemo(() => videos.filter(v => {
                           flex items-center gap-1 p-1.5">
                           {MARKER_COLORS.map(c => (
                             <button key={c.key}
-                              onClick={() => setBookmarkColor(video.videoId, c.key)}
+                              onClick={() => { bm.setColor(video.videoId, c.key); setOpenPickerId(null) }}
                               title={c.label}
                               className="w-5 h-5 rounded-full transition-transform hover:scale-125 focus:outline-none"
                               style={{
                                 backgroundColor: c.hex,
-                                boxShadow: bookmarks[video.videoId] === c.key
+                                boxShadow: bmColorMap[video.videoId] === c.key
                                   ? `0 0 0 2px #18181b, 0 0 0 3.5px ${c.hex}` : 'none',
                               }}
                             />
                           ))}
                           <div className="w-px h-4 bg-zinc-700 mx-0.5"/>
-                          <button onClick={() => removeBookmark(video.videoId)}
-                            title="Bỏ đánh dấu"
+                          <button onClick={() => { bm.remove(video.videoId); setOpenPickerId(null) }}
+                            title="Bỏ Bookmark"
                             className="w-5 h-5 flex items-center justify-center text-zinc-500
                               hover:text-red-400 transition-colors rounded">
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -620,22 +698,6 @@ const filtered = useMemo(() => videos.filter(v => {
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-0.5">
                         <CopyLinkBtn videoId={video.videoId} />
-                        {bm && (
-                          <button
-                            onClick={e => { e.stopPropagation(); bm.toggle(video, channelMeta || { name: channelName }) }}
-                            title={bm.isSaved(video.videoId) ? 'Đã lưu — nhấn để bỏ lưu' : 'Lưu vào mục Đã lưu'}
-                            className={`w-7 h-7 rounded-lg flex items-center justify-center border border-transparent transition-all ${
-                              bm.isSaved(video.videoId)
-                                ? 'text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/30'
-                                : 'text-zinc-600 hover:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/30'
-                            }`}>
-                            <svg className="w-3.5 h-3.5" fill={bm.isSaved(video.videoId) ? 'currentColor' : 'none'}
-                              viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round"
-                                d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/>
-                            </svg>
-                          </button>
-                        )}
                         <button
                           onClick={e => { e.stopPropagation(); setDetailVideo(video) }}
                           title="Xem chi tiết"
@@ -647,6 +709,19 @@ const filtered = useMemo(() => videos.filter(v => {
                               d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                           </svg>
                         </button>
+                        {hd && (
+                          <button
+                            onClick={e => { e.stopPropagation(); hd.hide(withIndex(video), channelMeta || { name: channelName }) }}
+                            title="Ẩn video này khỏi danh sách"
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-600
+                              hover:text-red-400 hover:bg-red-500/10 border border-transparent
+                              hover:border-red-500/30 transition-all">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round"
+                                d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -717,6 +792,19 @@ const filtered = useMemo(() => videos.filter(v => {
                   <div className="absolute bottom-1 left-1 bg-black/70 text-white text-[10px]
                     font-medium px-1.5 py-0.5 rounded">{formatViews(video.viewCount)}</div>
                 )}
+                {hd && (
+                  <button
+                    onClick={e=>{ e.preventDefault(); e.stopPropagation(); hd.hide(withIndex(video), channelMeta || { name: channelName }) }}
+                    title="Ẩn video này khỏi danh sách"
+                    className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center rounded-md
+                      bg-black/60 text-white/80 hover:text-red-400 hover:bg-black/80 opacity-0
+                      group-hover:opacity-100 transition-all">
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round"
+                        d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                    </svg>
+                  </button>
+                )}
               </div>
               {/* Info */}
               <div className="p-2 flex flex-col gap-1.5">
@@ -748,17 +836,21 @@ const filtered = useMemo(() => videos.filter(v => {
                   </button>
                   {bm && (
                     <button
-                      onClick={e=>{ e.preventDefault(); e.stopPropagation(); bm.toggle(video, channelMeta || { name: channelName }) }}
-                      title={bm.isSaved(video.videoId) ? 'Đã lưu — nhấn để bỏ lưu' : 'Lưu vào mục Đã lưu'}
+                      onClick={e=>{
+                        e.preventDefault(); e.stopPropagation()
+                        if ((e.ctrlKey || e.metaKey) && bm.isSaved(video.videoId)) bm.remove(video.videoId)
+                        else bm.toggle(withIndex(video), channelMeta || { name: channelName })
+                      }}
+                      title={bm.isSaved(video.videoId) ? 'Đã Bookmark — nhấn (hoặc Ctrl+Click) để bỏ' : 'Bookmark video này'}
                       className={`flex items-center gap-1 text-[10px] transition-colors ${
-                        bm.isSaved(video.videoId) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'
+                        bm.isSaved(video.videoId) ? colorOf(bmColorMap[video.videoId]).icon : 'text-zinc-600 hover:text-amber-400'
                       }`}>
                       <svg className="w-3 h-3" fill={bm.isSaved(video.videoId) ? 'currentColor' : 'none'}
                         viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round"
-                          d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/>
+                          d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
                       </svg>
-                      {bm.isSaved(video.videoId) ? 'Đã lưu' : 'Lưu'}
+                      {bm.isSaved(video.videoId) ? 'Bookmark' : 'Bookmark'}
                     </button>
                   )}
                 </div>

@@ -77,7 +77,7 @@ def _save_key_to_file(key: str):
 API_KEY = _load_saved_key() or os.getenv("YOUTUBE_API_KEY")
 ICT = timezone(timedelta(hours=7))
 DAYS_VN = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"]
-APP_VERSION = "2026.05.49"
+APP_VERSION = "2026.05.50"
 
 
 # ── License ──────────────────────────────────────────────────────────────────
@@ -793,6 +793,49 @@ async def api_save_bookmarks(body: BookmarksBody):
     """Ghi đè toàn bộ danh sách bookmark (frontend gửi list mới mỗi lần thay đổi)."""
     _save_bookmarks(body.bookmarks)
     return {"ok": True, "count": len(body.bookmarks)}
+
+
+# ── Hidden videos (danh sách video bị ẩn vĩnh viễn khỏi bảng, bền vững cạnh EXE) ─
+def _hidden_path() -> str:
+    if getattr(sys, 'frozen', False):
+        return os.path.join(os.path.dirname(sys.executable), 'hidden.json')
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hidden.json')
+
+
+def _load_hidden() -> list:
+    try:
+        with open(_hidden_path(), 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+        return data.get('hidden', []) if isinstance(data, dict) else []
+    except Exception:
+        return []
+
+
+def _save_hidden(items: list):
+    try:
+        with open(_hidden_path(), 'w', encoding='utf-8') as f:
+            json.dump(items, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+class HiddenBody(BaseModel):
+    hidden: list
+
+
+@app.get("/api/hidden")
+async def api_get_hidden():
+    """Trả về toàn bộ video đã ẩn."""
+    return {"hidden": _load_hidden()}
+
+
+@app.post("/api/hidden")
+async def api_save_hidden(body: HiddenBody):
+    """Ghi đè toàn bộ danh sách video đã ẩn (frontend gửi list mới mỗi lần thay đổi)."""
+    _save_hidden(body.hidden)
+    return {"ok": True, "count": len(body.hidden)}
 
 
 @app.get("/health")

@@ -229,7 +229,7 @@ export default function VideoDetailModal({ video, onClose, channelName, channelM
           <div className="flex items-center gap-2">
             {bm && (
               <button onClick={() => bm.toggle(video, channelMeta || { name: channelName })}
-                title={saved ? 'Bỏ lưu' : 'Lưu vào mục Đã lưu'}
+                title={saved ? 'Bỏ Bookmark' : 'Bookmark video này'}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-all ${
                   saved
                     ? 'border-amber-500/50 bg-amber-500/10 text-amber-300'
@@ -240,7 +240,7 @@ export default function VideoDetailModal({ video, onClose, channelName, channelM
                   <path strokeLinecap="round" strokeLinejoin="round"
                     d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"/>
                 </svg>
-                {saved ? 'Đã lưu' : 'Lưu'}
+                {saved ? 'Bookmark' : 'Bookmark'}
               </button>
             )}
             <button onClick={() => exportSingleTxt(video, channelName)}
